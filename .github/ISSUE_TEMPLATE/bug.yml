@@ -1,0 +1,19 @@
+name: Bug report
+description: Report a reproducible failure (redact private URLs).
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps, expected behavior, and actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and StrataFetch commit/version
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted errors or logs

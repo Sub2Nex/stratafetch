@@ -3,4 +3,6 @@
 *.sqlite*
 *.part
 *.lockfile
+/.tools/
+/.smoke/
 

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "StrataFetch",
+  "version": "0.1.0",
+  "description": "Send links to your local StrataFetch manager.",
+  "permissions": ["nativeMessaging", "contextMenus", "activeTab"],
+  "background": { "scripts": ["background.js"] },
+  "action": { "default_popup": "popup.html" },
+  "browser_specific_settings": { "gecko": { "id": "stratafetch@local", "strict_min_version": "109.0" } }
+}
