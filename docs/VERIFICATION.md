@@ -6,7 +6,7 @@ Environment: Windows x64, Rust 1.99.0 stable MSVC, 2026-10-11. This is an unsign
 
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets --offline -- -D warnings`: no source lint failures. The sandbox occasionally reports incremental-cache hard-link copy warnings.
-- `cargo test --workspace --offline`: 25 tests passed (20 engine integration tests, four native/IPC framing tests, one Windows OS-local IPC roundtrip).
+- Earlier `cargo test --workspace --offline`: 25 tests passed. After final range-bound hardening, all 26 substantive tests passed through `cargo test -p strata-core --offline` (21 engine integration tests) and `cargo test -p strata-app --lib --test ipc --offline` (four framing tests plus one Windows IPC roundtrip). The final full-workspace invocation was interrupted by Windows application control blocking a zero-test browser-host wrapper; no failing assertion occurred.
 - `cargo build --release --workspace --offline`: all three Windows MSVC x64 executables built.
 - `cargo doc --workspace --no-deps --offline`.
 - cargo-audit 0.22.2: zero known vulnerabilities, zero advisory warnings. Advisory database commit and results are recorded in AUDIT.json.
@@ -23,7 +23,7 @@ The native wgpu desktop launched, displayed real persisted data, captured its ac
 
 A real HTTPS transfer from https://www.rust-lang.org/ completed with normal certificate validation, producing an 18,594-byte HTML response. This practical smoke check is separate from the deterministic test suite.
 
-Windows application control initially rejected the unsigned desktop and one test executable with error 4551. Subsequent final builds launched normally, and the complete test suite passed. No security setting was changed or protection bypassed. Binaries remain unsigned and may require approval under other machines' policies.
+Windows application control intermittently rejected unsigned desktop/test executables with error 4551. Native builds subsequently launched normally, an earlier complete workspace run passed, and final substantive test targets passed independently. The latest full-workspace attempt hit the policy block on a zero-test browser-host wrapper. No security setting was changed or protection bypassed. Binaries remain unsigned and may require approval under other machines' policies.
 
 Ten measured loopback timing trials are recorded in BENCHMARKS.md and benchmark.csv. No WAN, browser/IDM, CPU, or memory-performance claim is made.
 

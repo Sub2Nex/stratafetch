@@ -173,7 +173,12 @@ pub(crate) async fn run(
         }
         let mut body = probe.bytes_stream();
         let mut received = 0;
-        while let Some(bytes) = body.next().await {
+        loop {
+            let chunk =
+                tokio::select! {chunk=body.next()=>chunk,_=cancelled(&mut cancel)=>return Ok(())};
+            let Some(bytes) = chunk else {
+                break;
+            };
             received += bytes.map_err(|e| anyhow::anyhow!(e.without_url()))?.len();
             ensure!(received <= 1, "Oversized probe response");
         }
@@ -234,7 +239,7 @@ pub(crate) async fn run(
                     let start = i as u64 * chunk;
                     (start < total).then_some(Segment {
                         start,
-                        end: (start + chunk - 1).min(total - 1),
+                        end: start.saturating_add(chunk - 1).min(total - 1),
                         done: 0,
                         sha256: None,
                     })

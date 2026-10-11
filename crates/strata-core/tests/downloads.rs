@@ -87,7 +87,14 @@ async fn handler(State(server): State<Server>, headers: HeaderMap) -> Response<B
         }
         let mut response = Response::builder().status(206).header(
             "Content-Range",
-            format!("bytes {advertised}-{b}/{}", server.data.len()),
+            format!(
+                "bytes {advertised}-{b}/{}",
+                if server.mode == 13 {
+                    u64::MAX
+                } else {
+                    server.data.len() as u64
+                }
+            ),
         );
         if server.mode == 9 {
             response = response.header(
@@ -561,5 +568,19 @@ async fn completed_checksum_detects_file_changes() {
     assert!(manager.verify(&job.id, Some(&"0".repeat(64))).is_err());
     std::fs::write(complete.destination, b"changed after completion").unwrap();
     assert!(manager.verify(&job.id, None).is_err());
+    task.abort();
+}
+
+#[tokio::test]
+async fn extreme_untrusted_range_total_fails_without_panicking() {
+    let (url, _, task) = server(13, 100).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let job = manager.add(&url, dir.path(), None).unwrap();
+    manager.start(&job.id).unwrap();
+    let failed = wait(&manager, &job.id).await;
+    assert_eq!(failed.status, Status::Failed);
+    assert!(!failed.destination.exists());
+    assert!(!manager.is_running());
     task.abort();
 }

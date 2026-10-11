@@ -16,7 +16,7 @@
 | CLI and local control | Actual release CLI transfer, status, resume, checksum; IPC test |
 | Persistent history | Actual state survives desktop/CLI process boundaries |
 | Native GUI/working engine connection | Actual live transfer screenshot |
-| Automated tests | 25 passing workspace tests |
+| Automated tests | 26 substantive tests pass; final full-workspace run encountered a Windows policy block on an empty test wrapper |
 | Primary platform build | Windows x64 MSVC release binaries verified |
 | MIT OR Apache-2.0 | Full source license texts; dependency notices retain upstream licenses |
 | Reproducible project | Locked workspace, build docs, CI/release workflows |
