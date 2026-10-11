@@ -3,6 +3,7 @@
 1. Build `stratafetch-browser-host` and keep the executable in a permanent location.
 2. In Chrome/Edge enable developer mode on the extensions page, then Load unpacked `extensions/chromium`. Copy its extension ID.
 3. Run PowerShell 7: `./packaging/register-browser-host.ps1 -BinaryPath ./target/release/stratafetch-browser-host.exe -ChromiumExtensionId YOUR_EXTENSION_ID`. No administrator access is needed. The script writes per-user Chrome/Edge/Firefox native-host manifests and registry entries. Review it before running.
+   For a portable archive, use `-BinaryPath ./stratafetch-browser-host.exe` instead. The registration must point to its permanent installed location.
 4. Start StrataFetch desktop or `stratafetch serve`. Open the popup; its status should say Connected. Send a direct link or use the link context menu.
 5. Firefox: load `extensions/firefox/manifest.json` as a temporary extension through about:debugging. Permanent distribution requires Mozilla signing; this preview is not signed.
 

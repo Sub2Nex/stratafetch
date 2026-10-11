@@ -9,6 +9,9 @@ struct Args {
     state: Option<PathBuf>,
     #[arg(long, global = true)]
     json: bool,
+    /// Fail unless a desktop or service instance is already listening.
+    #[arg(long, global = true)]
+    require_service: bool,
     #[command(subcommand)]
     command: Action,
 }
@@ -98,7 +101,10 @@ async fn main() -> anyhow::Result<()> {
     let mut reply = if !serve {
         match ipc::call(&directory, command.clone()).await {
             Ok(reply) => reply,
-            Err(_) => {
+            Err(error) => {
+                if args.require_service {
+                    return Err(error.context("No running StrataFetch service is reachable"));
+                }
                 let manager = Manager::open(&directory, Options::default())?;
                 let reply = execute(&manager, command);
                 local = Some(manager);

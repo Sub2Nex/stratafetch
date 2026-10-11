@@ -12,11 +12,11 @@ New jobs are Paused. Start transitions to Queued, then Downloading once capacity
 
 A GET `bytes=0-0` probe determines actual range support. Safe segmentation additionally requires a strong ETag or Last-Modified validator. Ranges are nonoverlapping and have independent file handles. Every response must be HTTP 206 with the exact expected bounds, total, validator, and identity encoding. Too many bytes, truncation, or changed validators prevent publication. Resumed requests carry If-Range.
 
-Durable file synchronization precedes each SQLite checkpoint. SHA-256 prefix digests validate saved partial segments before resume. Uncheckpointed trailing bytes are rewritten. SHA-256 is computed by streaming the final staging file. A same-directory hard link publishes without replacing an existing destination; SQLite records completion before staging cleanup. Filesystems without hard-link support fail clearly and keep staging data. Recovery after a crash between publication and database completion needs manual inspection; the engine will not overwrite the published file.
+Durable file synchronization precedes each SQLite checkpoint. SHA-256 prefix digests validate saved partial segments before resume. Uncheckpointed trailing bytes are rewritten. SHA-256 is computed by streaming the final staging file. A same-directory hard link publishes without replacing an existing destination; SQLite records completion before staging cleanup. Filesystems without hard-link support fail clearly and keep staging data. Recovery checks file identity and prefix checksums when a crash occurs between publication and database completion, and records completion only after validation. This boundary has a regression test.
 
 ## Coordination
 
-An exclusive state lock prevents competing writers. IPC uses named pipes on Windows with remote clients rejected, or Unix sockets with mode 0600. The protocol is versioned and limited to 1 MiB, with timeouts and 16 concurrent handlers. Native messaging is limited to 64 KiB and checks registered extension origins. IPC has no TCP listener. Windows relies on the pipe creator's default DACL; explicit per-user DACL hardening is a release follow-up.
+An exclusive state lock prevents competing writers. IPC uses named pipes on Windows with remote clients rejected and a protected owner/System DACL, or Unix sockets with mode 0600. The protocol is versioned and limited to 1 MiB, with timeouts and 16 concurrent handlers. Native messaging is limited to 64 KiB and checks registered extension origins. IPC has no TCP listener. Windows owner access passed the initial roundtrip test; a different-user denial test remains outstanding. A desktop opened while an engine already runs attaches through IPC.
 
 ## Extension points
 

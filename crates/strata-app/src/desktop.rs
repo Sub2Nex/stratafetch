@@ -189,6 +189,7 @@ impl App {
     }
 }
 fn bytes(value: f64) -> String {
+    let value = if value <= 0.0 { 0.0 } else { value };
     if value >= 1_073_741_824.0 {
         format!("{:.2} GiB", value / 1_073_741_824.0)
     } else if value >= 1_048_576.0 {
@@ -231,7 +232,12 @@ impl eframe::App for App {
         if let Some(output) = std::env::var_os("STRATAFETCH_SMOKE_OUTPUT") {
             if self.smoke_started.elapsed() > Duration::from_secs(3) && !self.smoke_requested {
                 self.smoke_requested = true;
-                self.selected = self.jobs.first().map(|j| j.id.clone());
+                self.selected = self
+                    .jobs
+                    .iter()
+                    .find(|j| j.status == Status::Downloading)
+                    .or_else(|| self.jobs.first())
+                    .map(|j| j.id.clone());
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
             }
             let screenshot = ctx.input(|i| {

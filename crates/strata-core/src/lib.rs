@@ -47,6 +47,8 @@ pub struct Job {
     pub error: Option<String>,
     pub sha256: Option<String>,
     pub created: u64,
+    #[serde(default)]
+    pub sequence: u64,
     pub completed: Option<u64>,
     pub priority: i32,
     pub bytes_per_second: u64,
@@ -126,7 +128,7 @@ impl Manager {
 
     pub fn list(&self) -> Vec<Job> {
         let mut jobs: Vec<_> = self.0.jobs.lock().unwrap().values().cloned().collect();
-        jobs.sort_by_key(|j| (std::cmp::Reverse(j.priority), j.created));
+        jobs.sort_by_key(|j| (std::cmp::Reverse(j.priority), j.sequence, j.created));
         jobs
     }
     pub fn get(&self, id: &str) -> Result<Job> {
@@ -185,6 +187,13 @@ impl Manager {
             error: None,
             sha256: None,
             created: now(),
+            sequence: jobs
+                .iter()
+                .map(|job| job.sequence)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .context("Download sequence exhausted")?,
             completed: None,
             priority: 0,
             bytes_per_second: 0,

@@ -4,7 +4,11 @@ A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
 **Development preview — release acceptance is still being verified.** No public release or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
+![Actual StrataFetch desktop during an 8 MiB fixture transfer](docs/screenshot.png)
+
 ## Run
+
+For a Windows portable preview, extract the ZIP and run `stratafetch-desktop.exe`. The command-line executable is `stratafetch.exe`. Rust is only needed when building from source.
 
 Install stable Rust and the platform build tools. On Windows use Visual Studio Build Tools with the C++ workload. On Linux install `libxkbcommon-dev`, `libwayland-dev`, and standard C/C++ development tools.
 
@@ -13,13 +17,14 @@ cargo build --release --locked
 cargo run --release --bin stratafetch-desktop
 ```
 
-The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open Add Download with Ctrl+N. You can paste several URLs, one per line. Set the destination in Settings or the Add dialog. Select a download to view segments, checksum, and transfer controls. Partial transfers remain paused after a restart. Completed files are never automatically executed.
+The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open Add Download with Ctrl+N. You can paste several URLs, one per line. Set the destination in Settings or the Add dialog. Select a download to view segments, checksum, and transfer controls. Partial transfers remain paused after a restart. Completed files are never automatically executed. Native launch and rendering are verified; the full manual interaction checklist remains outstanding.
 
 ## CLI
 
 ```sh
 stratafetch add https://example.org/file.zip --directory ./downloads
 stratafetch --json list
+stratafetch --require-service list
 stratafetch status DOWNLOAD_ID
 stratafetch pause DOWNLOAD_ID
 stratafetch resume DOWNLOAD_ID
