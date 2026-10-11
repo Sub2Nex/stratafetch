@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use strata_app::{Command, check_reply, download_dir, execute, ipc, shutdown, state_dir};
-use strata_core::{Manager, Options, Status};
+use strata_core::{Manager, Options, Settings, Status};
 #[derive(Parser)]
 #[command(version, about = "StrataFetch — local-first HTTP download manager")]
 struct Args {
@@ -17,6 +17,15 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Persist engine limits. Rate is aggregate bytes/second; zero is unlimited.
+    Settings {
+        #[arg(long, default_value_t = 4)]
+        connections: usize,
+        #[arg(long, default_value_t = 3)]
+        concurrent_jobs: usize,
+        #[arg(long, default_value_t = 0)]
+        global_bytes_per_second: u64,
+    },
     Add {
         url: String,
         #[arg(short, long)]
@@ -72,6 +81,17 @@ async fn main() -> anyhow::Result<()> {
         Action::Add { .. } | Action::Resume { .. } | Action::Restart { .. }
     );
     let command = match args.command {
+        Action::Settings {
+            connections,
+            concurrent_jobs,
+            global_bytes_per_second,
+        } => Command::Settings {
+            settings: Settings {
+                connections,
+                concurrent_jobs,
+                global_bytes_per_second,
+            },
+        },
         Action::Add {
             url,
             directory,
@@ -145,6 +165,12 @@ async fn main() -> anyhow::Result<()> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&reply)?);
     } else {
+        println!(
+            "Engine: {} connections, {} simultaneous, {} B/s aggregate (0 = unlimited)",
+            reply.settings.connections,
+            reply.settings.concurrent_jobs,
+            reply.settings.global_bytes_per_second
+        );
         for job in &reply.jobs {
             println!(
                 "{}  {:?}  {} / {}  {}",

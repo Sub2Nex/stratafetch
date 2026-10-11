@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::watch;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,11 +74,30 @@ impl Default for Options {
     }
 }
 
+/// Persisted engine-wide controls, shared by all local clients.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Settings {
+    pub connections: usize,
+    pub concurrent_jobs: usize,
+    /// Aggregate payload bytes per second; zero means unlimited.
+    pub global_bytes_per_second: u64,
+}
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            connections: 4,
+            concurrent_jobs: 3,
+            global_bytes_per_second: 0,
+        }
+    }
+}
+
 pub(crate) struct Inner {
     pub jobs: Mutex<HashMap<String, Job>>,
     pub store: Mutex<storage::Store>,
     pub controls: Mutex<HashMap<String, watch::Sender<bool>>>,
-    pub slots: Arc<Semaphore>,
+    pub settings: Mutex<Settings>,
+    pub bandwidth: tokio::sync::Mutex<()>,
     pub options: Options,
     pub client: reqwest::Client,
     pub meter: Mutex<HashMap<String, (std::time::Instant, u64)>>,
@@ -92,6 +111,11 @@ impl Manager {
     pub fn open(directory: &Path, options: Options) -> Result<Self> {
         std::fs::create_dir_all(directory)?;
         let store = storage::Store::open(directory)?;
+        let settings = store.settings()?.unwrap_or(Settings {
+            connections: options.connections.clamp(1, 16),
+            concurrent_jobs: options.concurrent_jobs.clamp(1, 32),
+            global_bytes_per_second: 0,
+        });
         let mut jobs = store.load()?;
         for job in jobs.values_mut() {
             if storage::recover_published(job)? {
@@ -119,7 +143,8 @@ impl Manager {
             jobs: Mutex::new(jobs),
             store: Mutex::new(store),
             controls: Mutex::new(HashMap::new()),
-            slots: Arc::new(Semaphore::new(options.concurrent_jobs.clamp(1, 32))),
+            settings: Mutex::new(settings),
+            bandwidth: tokio::sync::Mutex::new(()),
             client: builder.build()?,
             options,
             meter: Mutex::new(HashMap::new()),
@@ -130,6 +155,24 @@ impl Manager {
         let mut jobs: Vec<_> = self.0.jobs.lock().unwrap().values().cloned().collect();
         jobs.sort_by_key(|j| (std::cmp::Reverse(j.priority), j.sequence, j.created));
         jobs
+    }
+    pub fn settings(&self) -> Settings {
+        self.0.settings.lock().unwrap().clone()
+    }
+    /// A reduced concurrency limit lets active jobs finish; it prevents new admissions.
+    pub fn set_settings(&self, settings: Settings) -> Result<()> {
+        anyhow::ensure!(
+            (1..=16).contains(&settings.connections),
+            "Connections must be between 1 and 16"
+        );
+        anyhow::ensure!(
+            (1..=32).contains(&settings.concurrent_jobs),
+            "Simultaneous downloads must be between 1 and 32"
+        );
+        let mut current = self.0.settings.lock().unwrap();
+        self.0.store.lock().unwrap().save_settings(&settings)?;
+        *current = settings;
+        Ok(())
     }
     pub fn get(&self, id: &str) -> Result<Job> {
         self.0
@@ -147,6 +190,8 @@ impl Manager {
     }
     /// Adds a URL. Credentials embedded in URLs are rejected; names never escape the folder.
     pub fn add(&self, raw: &str, directory: &Path, name: Option<&str>) -> Result<Job> {
+        // Serialize destination reservations and sequence assignment across IPC clients.
+        let _controls = self.0.controls.lock().unwrap();
         let url = url::Url::parse(raw.trim()).context("Enter a valid HTTP or HTTPS URL")?;
         if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
             bail!("Only HTTP and HTTPS URLs are supported");
@@ -262,7 +307,8 @@ impl Manager {
         Ok(())
     }
     pub fn restart(&self, id: &str) -> Result<()> {
-        if self.0.controls.lock().unwrap().contains_key(id) {
+        let controls = self.0.controls.lock().unwrap();
+        if controls.contains_key(id) {
             bail!("Pause and wait before restarting");
         }
         let mut job = self.get(id)?;
@@ -279,10 +325,12 @@ impl Manager {
         job.size = None;
         job.status = Status::Paused;
         self.update(job)?;
+        drop(controls);
         self.start(id)
     }
     pub fn remove(&self, id: &str) -> Result<()> {
-        if self.0.controls.lock().unwrap().contains_key(id) {
+        let controls = self.0.controls.lock().unwrap();
+        if controls.contains_key(id) {
             bail!("Pause and wait before removing");
         }
         let job = self.get(id)?;
@@ -330,7 +378,8 @@ impl Manager {
         Ok(())
     }
     pub fn configure(&self, id: &str, priority: i32, bytes_per_second: u64) -> Result<()> {
-        if self.0.controls.lock().unwrap().contains_key(id) {
+        let controls = self.0.controls.lock().unwrap();
+        if controls.contains_key(id) {
             bail!("Pause before changing transfer settings");
         }
         let mut job = self.get(id)?;

@@ -12,6 +12,97 @@ use std::sync::{
 use strata_core::{Manager, Options, Status};
 use tempfile::TempDir;
 
+#[tokio::test]
+async fn aggregate_bandwidth_is_shared_and_settings_survive_reopen() {
+    let (url, state, task) = server(0, 128 * 1024).await;
+    let dir = TempDir::new().unwrap();
+    let state_dir = dir.path().join("state");
+    let manager = Manager::open(&state_dir, Options::default()).unwrap();
+    let settings = strata_core::Settings {
+        connections: 2,
+        concurrent_jobs: 2,
+        global_bytes_per_second: 256 * 1024,
+    };
+    manager.set_settings(settings.clone()).unwrap();
+    let a = manager.add(&url, dir.path(), Some("a.bin")).unwrap();
+    let b = manager.add(&url, dir.path(), Some("b.bin")).unwrap();
+    let started = std::time::Instant::now();
+    manager.start(&a.id).unwrap();
+    manager.start(&b.id).unwrap();
+    let a = wait(&manager, &a.id).await;
+    let b = manager.get(&b.id).unwrap();
+    assert_eq!(a.status, Status::Completed, "{:?}", a.error);
+    assert_eq!(b.status, Status::Completed, "{:?}", b.error);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(950));
+    assert_eq!(std::fs::read(a.destination).unwrap(), *state.data);
+    assert_eq!(std::fs::read(b.destination).unwrap(), *state.data);
+    drop(manager);
+    assert_eq!(
+        Manager::open(&state_dir, Options::default())
+            .unwrap()
+            .settings(),
+        settings
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn changing_limits_unblocks_queue_and_cancels_slow_throttle() {
+    let (url, _, task) = server(0, 512 * 1024).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    manager
+        .set_settings(strata_core::Settings {
+            connections: 2,
+            concurrent_jobs: 1,
+            global_bytes_per_second: 1,
+        })
+        .unwrap();
+    let a = manager.add(&url, dir.path(), Some("a.bin")).unwrap();
+    let b = manager.add(&url, dir.path(), Some("b.bin")).unwrap();
+    manager.start(&a.id).unwrap();
+    manager.start(&b.id).unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    assert_eq!(manager.get(&a.id).unwrap().status, Status::Downloading);
+    assert_eq!(manager.get(&b.id).unwrap().status, Status::Queued);
+    manager.pause(&a.id).unwrap();
+    manager
+        .set_settings(strata_core::Settings {
+            connections: 2,
+            concurrent_jobs: 2,
+            global_bytes_per_second: 0,
+        })
+        .unwrap();
+    assert_eq!(wait(&manager, &b.id).await.status, Status::Completed);
+    assert_eq!(manager.get(&a.id).unwrap().status, Status::Paused);
+    manager.start(&a.id).unwrap();
+    assert_eq!(wait(&manager, &a.id).await.status, Status::Completed);
+    assert_eq!(manager.get(&b.id).unwrap().segments.len(), 2);
+    task.abort();
+}
+
+#[test]
+fn concurrent_adds_reserve_distinct_destinations_and_sequence() {
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    std::thread::scope(|scope| {
+        for _ in 0..16 {
+            scope.spawn(|| {
+                manager
+                    .add("https://example.com/file", dir.path(), Some("same.bin"))
+                    .unwrap();
+            });
+        }
+    });
+    let jobs = manager.list();
+    assert_eq!(jobs.len(), 16);
+    let destinations: std::collections::HashSet<_> =
+        jobs.iter().map(|job| &job.destination).collect();
+    let sequences: std::collections::HashSet<_> = jobs.iter().map(|job| job.sequence).collect();
+    assert_eq!(destinations.len(), 16);
+    assert_eq!(sequences.len(), 16);
+}
+
 #[derive(Clone)]
 struct Server {
     data: Arc<Vec<u8>>,

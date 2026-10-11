@@ -4,7 +4,7 @@ pub mod native;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use strata_core::{Job, Manager, Status};
+use strata_core::{Job, Manager, Settings, Status};
 
 pub fn state_dir() -> PathBuf {
     if let Some(path) = std::env::var_os("STRATAFETCH_STATE_DIR") {
@@ -24,6 +24,9 @@ pub fn download_dir() -> PathBuf {
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Command {
     List,
+    Settings {
+        settings: Settings,
+    },
     Verify {
         id: String,
         sha256: Option<String>,
@@ -60,6 +63,8 @@ pub struct Reply {
     pub jobs: Vec<Job>,
     pub error: Option<String>,
     pub accepted_id: Option<String>,
+    #[serde(default)]
+    pub settings: Settings,
 }
 pub fn execute(manager: &Manager, command: Command) -> Reply {
     let mut accepted_id = match &command {
@@ -75,6 +80,7 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
     let result: Result<()> = (|| {
         match command {
             Command::List => (),
+            Command::Settings { settings } => manager.set_settings(settings)?,
             Command::Verify { id, sha256 } => manager.verify(&id, sha256.as_deref())?,
             Command::Add {
                 url,
@@ -103,6 +109,7 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
         jobs: manager.list(),
         error: result.err().map(|e| format!("{e:#}")),
         accepted_id,
+        settings: manager.settings(),
     }
 }
 pub async fn shutdown(manager: &Manager) {

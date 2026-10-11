@@ -98,6 +98,7 @@ impl Store {
             "State database was created by a newer StrataFetch version"
         );
         connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, json TEXT NOT NULL, digest TEXT NOT NULL); PRAGMA user_version=1;")?;
+        connection.execute_batch("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL);")?;
         Ok(Self {
             connection,
             _lock: lock,
@@ -122,6 +123,19 @@ impl Store {
             jobs.insert(id, serde_json::from_str(&json)?);
         }
         Ok(jobs)
+    }
+    pub fn settings(&self) -> Result<Option<crate::Settings>> {
+        use rusqlite::OptionalExtension;
+        let json: Option<String> = self
+            .connection
+            .query_row("SELECT json FROM settings WHERE id=1", [], |row| row.get(0))
+            .optional()?;
+        json.map(|value| serde_json::from_str(&value).map_err(Into::into))
+            .transpose()
+    }
+    pub fn save_settings(&self, settings: &crate::Settings) -> Result<()> {
+        self.connection.execute("INSERT INTO settings(id,json) VALUES(1,?1) ON CONFLICT(id) DO UPDATE SET json=excluded.json", [serde_json::to_string(settings)?])?;
+        Ok(())
     }
     pub fn save(&self, job: &Job) -> Result<()> {
         let json = serde_json::to_string(job)?;

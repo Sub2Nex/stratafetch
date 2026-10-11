@@ -114,21 +114,32 @@ pub(crate) async fn run(
     id: &str,
     mut cancel: watch::Receiver<bool>,
 ) -> Result<()> {
-    let _permit = loop {
+    loop {
         if *cancel.borrow() {
             return Ok(());
         }
-        if manager
-            .list()
-            .iter()
-            .find(|j| j.status == Status::Queued)
-            .is_some_and(|j| j.id == id)
-            && let Ok(permit) = manager.0.slots.clone().try_acquire_owned()
         {
-            break permit;
+            let _controls = manager.0.controls.lock().unwrap();
+            let jobs = manager.list();
+            if !*cancel.borrow()
+                && jobs
+                    .iter()
+                    .filter(|j| j.status == Status::Downloading)
+                    .count()
+                    < manager.settings().concurrent_jobs
+                && jobs
+                    .iter()
+                    .find(|j| j.status == Status::Queued)
+                    .is_some_and(|j| j.id == id)
+            {
+                let mut job = manager.get(id)?;
+                job.status = Status::Downloading;
+                manager.update(job)?;
+                break;
+            }
         }
         tokio::select! {_=tokio::time::sleep(Duration::from_millis(25))=>(),_=cancelled(&mut cancel)=>return Ok(())};
-    };
+    }
     let mut job = manager.get(id)?;
     if *cancel.borrow() {
         return Ok(());
@@ -227,8 +238,7 @@ pub(crate) async fn run(
         job.segments = if segmented {
             let total = range_total.unwrap();
             let count = manager
-                .0
-                .options
+                .settings()
                 .connections
                 .clamp(1, 16)
                 .min(total.div_ceil(256 * 1024) as usize)
@@ -459,9 +469,19 @@ async fn transfer(
                 expected.is_none_or(|n| received <= n),
                 "Server sent too many bytes"
             );
-            file.write_all(&bytes).await?;
-            digest.update(&bytes);
-            pending += bytes.len() as u64;
+            for part in bytes.chunks(16 * 1024) {
+                tokio::select! {
+                    _ = global_throttle(manager, part.len()) => (),
+                    _ = cancelled(&mut cancel) => {
+                        file.sync_data().await?;
+                        checkpoint_job(manager,&shared,index,pending,&digest,start_time).await?;
+                        return Ok(());
+                    }
+                }
+                file.write_all(part).await?;
+                digest.update(part);
+                pending += part.len() as u64;
+            }
             if job.bytes_per_second > 0 {
                 let per_connection = job.bytes_per_second as f64 / job.connections.max(1) as f64;
                 tokio::select! {_=tokio::time::sleep(Duration::from_secs_f64(bytes.len() as f64/per_connection))=>(),_=cancelled(&mut cancel)=>{file.sync_data().await?;checkpoint_job(manager,&shared,index,pending,&digest,start_time).await?;return Ok(());}}
@@ -488,6 +508,27 @@ async fn transfer(
         );
         attempts += 1;
         tokio::select! {_=tokio::time::sleep(backoff(attempts))=>(),_=cancelled(&mut cancel)=>return Ok(())};
+    }
+}
+/// Serial payload pacing across all jobs, with bounded quanta and no initial burst.
+async fn global_throttle(manager: &Manager, bytes: usize) {
+    if manager.settings().global_bytes_per_second == 0 {
+        return;
+    }
+    let _gate = manager.0.bandwidth.lock().await;
+    let mut remaining = bytes as f64;
+    let mut last = Instant::now();
+    loop {
+        let rate = manager.settings().global_bytes_per_second;
+        if rate == 0 {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        remaining -= last.elapsed().as_secs_f64() * rate as f64;
+        last = Instant::now();
+        if remaining <= 0.0 {
+            return;
+        }
     }
 }
 async fn checkpoint_job(

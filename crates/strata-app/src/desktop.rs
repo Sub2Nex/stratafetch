@@ -3,7 +3,7 @@ use eframe::egui::{self, Color32, RichText};
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, path::PathBuf, sync::mpsc, time::Duration};
 use strata_app::{Command, Reply, download_dir, execute, ipc, shutdown, state_dir};
-use strata_core::{Job, Manager, Options, Status};
+use strata_core::{Job, Manager, Options, Settings, Status};
 
 #[derive(Serialize, Deserialize)]
 struct Preferences {
@@ -30,6 +30,8 @@ struct App {
     urls: String,
     add_open: bool,
     settings_open: bool,
+    engine_settings: Settings,
+    transfer_settings: Option<(String, u64, i32)>,
     error: Option<String>,
     delete: Option<String>,
     prefs: Preferences,
@@ -68,7 +70,7 @@ impl App {
                 loop {
                     let command=tokio::select! {command=rx.recv()=>match command {Some(command)=>command,None=>break},_=tick.tick()=>Command::List};
                     let verifying=matches!(command,Command::Verify{..});
-                    let reply=if let Some(manager)=&manager {execute(manager,command)} else {match ipc::call(&directory,command).await {Ok(reply)=>reply,Err(error)=>Reply {version:1,jobs:vec![],error:Some(format!("Local service unavailable: {error:#}")),accepted_id:None}}};
+                    let reply=if let Some(manager)=&manager {execute(manager,command)} else {match ipc::call(&directory,command).await {Ok(reply)=>reply,Err(error)=>Reply {version:1,jobs:vec![],error:Some(format!("Local service unavailable: {error:#}")),accepted_id:None,settings:Settings::default()}}};
                     if verifying && reply.error.is_none(){let _=worker_messages.try_send("SHA-256 verified: the file matches its recorded checksum.".into());}
                     if let Some(error)=&reply.error {let _=worker_messages.try_send(error.clone());}let _=snap_tx.try_send(reply);ctx.request_repaint();
                 }
@@ -86,6 +88,8 @@ impl App {
             urls: String::new(),
             add_open: false,
             settings_open: false,
+            engine_settings: Settings::default(),
+            transfer_settings: None,
             error: None,
             delete: None,
             prefs,
@@ -223,6 +227,9 @@ impl eframe::App for App {
             self.error = Some(message);
         }
         while let Ok(reply) = self.snapshots.try_recv() {
+            if !self.settings_open {
+                self.engine_settings = reply.settings;
+            }
             self.jobs = reply.jobs;
             if let Some(error) = reply.error {
                 self.error = Some(error);
@@ -442,6 +449,43 @@ impl eframe::App for App {
                     }
                     ui.add_space(15.0);
                     self.actions(ui, &job);
+                    ui.separator();
+                    ui.heading("Transfer limits");
+                    if self
+                        .transfer_settings
+                        .as_ref()
+                        .is_none_or(|draft| draft.0 != job.id)
+                    {
+                        self.transfer_settings =
+                            Some((job.id.clone(), job.bytes_per_second, job.priority));
+                    }
+                    let draft = self.transfer_settings.as_mut().unwrap();
+                    ui.label("Bytes / second (0 = unlimited)");
+                    ui.add(
+                        egui::DragValue::new(&mut draft.1)
+                            .range(0..=1_000_000_000u64)
+                            .speed(1024.0),
+                    );
+                    ui.label("Priority (higher runs first)");
+                    ui.add(egui::DragValue::new(&mut draft.2).range(-100..=100));
+                    let command = Command::Configure {
+                        id: job.id.clone(),
+                        bytes_per_second: draft.1,
+                        priority: draft.2,
+                    };
+                    if ui
+                        .add_enabled(
+                            !matches!(
+                                job.status,
+                                Status::Downloading | Status::Queued | Status::Completed
+                            ),
+                            egui::Button::new("Apply transfer limits"),
+                        )
+                        .clicked()
+                    {
+                        self.send(command);
+                    }
+                    ui.small("Pause and wait before changing a transfer.");
                 });
         }
         egui::CentralPanel::default().show(root, |ui| {
@@ -582,7 +626,19 @@ impl eframe::App for App {
                     ui.checkbox(&mut self.prefs.swedish, "Svenska");
                     ui.label(self.t("Default destination", "Standardmapp"));
                     ui.text_edit_singleline(&mut self.prefs.folder);
-                    ui.label("4 connections per file · 3 concurrent jobs");
+                    ui.separator();
+                    ui.heading("Download engine");
+                    ui.label("Aggregate bytes / second (0 = unlimited)");
+                    ui.add(egui::DragValue::new(&mut self.engine_settings.global_bytes_per_second).range(0..=1_000_000_000u64).speed(1024.0));
+                    ui.label("Maximum simultaneous downloads");
+                    ui.add(egui::Slider::new(&mut self.engine_settings.concurrent_jobs, 1..=32));
+                    ui.label("Connections for new transfers");
+                    ui.add(egui::Slider::new(&mut self.engine_settings.connections, 1..=16));
+                    ui.small("Existing partial files keep their segment layout. Lowering concurrency lets active jobs finish.");
+                    if ui.button("Save engine settings").clicked() {
+                        self.send(Command::Settings { settings: self.engine_settings.clone() });
+                        self.settings_open = false;
+                    }
                     ui.label("Downloads are paused after an unexpected shutdown.");
                     ui.label("No telemetry, accounts, or background clipboard monitoring.");
                 });
