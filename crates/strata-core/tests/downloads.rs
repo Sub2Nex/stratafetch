@@ -22,6 +22,7 @@ async fn aggregate_bandwidth_is_shared_and_settings_survive_reopen() {
         connections: 2,
         concurrent_jobs: 2,
         global_bytes_per_second: 256 * 1024,
+        ..Default::default()
     };
     manager.set_settings(settings.clone()).unwrap();
     let a = manager.add(&url, dir.path(), Some("a.bin")).unwrap();
@@ -56,6 +57,7 @@ async fn changing_limits_unblocks_queue_and_cancels_slow_throttle() {
             connections: 2,
             concurrent_jobs: 1,
             global_bytes_per_second: 1,
+            ..Default::default()
         })
         .unwrap();
     let a = manager.add(&url, dir.path(), Some("a.bin")).unwrap();
@@ -71,6 +73,7 @@ async fn changing_limits_unblocks_queue_and_cancels_slow_throttle() {
             connections: 2,
             concurrent_jobs: 2,
             global_bytes_per_second: 0,
+            ..Default::default()
         })
         .unwrap();
     assert_eq!(wait(&manager, &b.id).await.status, Status::Completed);
@@ -101,6 +104,99 @@ fn concurrent_adds_reserve_distinct_destinations_and_sequence() {
     let sequences: std::collections::HashSet<_> = jobs.iter().map(|job| job.sequence).collect();
     assert_eq!(destinations.len(), 16);
     assert_eq!(sequences.len(), 16);
+}
+
+#[tokio::test]
+async fn organization_schedule_and_history_recipes_are_safe() {
+    let (url, state, task) = server(0, 1024).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    manager
+        .set_settings(strata_core::Settings {
+            organize_by_extension: true,
+            ..Default::default()
+        })
+        .unwrap();
+    let scheduled = manager.add(&url, dir.path(), Some("report.PDF")).unwrap();
+    assert_eq!(scheduled.category, "Documents");
+    assert_eq!(
+        scheduled.destination.parent().unwrap(),
+        dir.path().join("Documents").canonicalize().unwrap()
+    );
+    let future = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 3600;
+    manager
+        .schedule(&scheduled.id, "Work", Some(future))
+        .unwrap();
+    manager.configure(&scheduled.id, 100, 0).unwrap();
+    manager.start(&scheduled.id).unwrap();
+    let immediate = manager.add(&url, dir.path(), Some("now.zip")).unwrap();
+    manager.start(&immediate.id).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if manager.get(&immediate.id).unwrap().status == Status::Completed {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(manager.get(&scheduled.id).unwrap().status, Status::Queued);
+    assert_eq!(std::fs::read(immediate.destination).unwrap(), *state.data);
+    manager.pause(&scheduled.id).unwrap();
+    while manager.is_running() {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let export = dir.path().join("history.json");
+    manager.export_history(&export).unwrap();
+    assert!(manager.export_history(&export).is_err());
+    let imported = Manager::open(&dir.path().join("import-state"), Options::default()).unwrap();
+    imported
+        .import_history(&export, &dir.path().join("imported"))
+        .unwrap();
+    assert_eq!(imported.list().len(), 2);
+    for job in imported.list() {
+        assert_eq!(job.status, Status::Paused);
+        assert_eq!(job.downloaded, 0);
+        assert!(job.segments.is_empty());
+        assert!(job.sha256.is_none());
+        assert_ne!(job.id, scheduled.id);
+    }
+    let malformed = dir.path().join("bad.json");
+    std::fs::write(&malformed,r#"{"version":1,"entries":[{"url":"file:///secret","filename":"../bad","category":"Other","priority":0,"bytes_per_second":0}]}"#).unwrap();
+    assert!(imported.import_history(&malformed, dir.path()).is_err());
+    assert_eq!(imported.list().len(), 2);
+    task.abort();
+}
+
+#[tokio::test]
+async fn repeated_pause_resume_preserves_all_segments() {
+    let (url, state, task) = server(0, 2 * 1024 * 1024).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let job = manager.add(&url, dir.path(), Some("repeated.bin")).unwrap();
+    manager.configure(&job.id, 0, 512 * 1024).unwrap();
+    let mut checkpoint = 0;
+    for _ in 0..5 {
+        manager.start(&job.id).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        manager.pause(&job.id).unwrap();
+        let paused = wait(&manager, &job.id).await;
+        assert_eq!(paused.status, Status::Paused);
+        assert!(paused.downloaded >= checkpoint);
+        checkpoint = paused.downloaded;
+    }
+    assert!(checkpoint > 0 && checkpoint < state.data.len() as u64);
+    manager.configure(&job.id, 0, 0).unwrap();
+    manager.start(&job.id).unwrap();
+    let completed = wait(&manager, &job.id).await;
+    assert_eq!(completed.status, Status::Completed, "{:?}", completed.error);
+    assert_eq!(std::fs::read(completed.destination).unwrap(), *state.data);
+    task.abort();
 }
 
 #[derive(Clone)]
@@ -612,6 +708,44 @@ fn newer_database_schema_is_not_downgraded() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
     assert_eq!(version, 99);
+}
+#[test]
+fn preview_schema_migrates_without_losing_jobs() {
+    use sha2::{Digest, Sha256};
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(dir.path(), Options::default()).unwrap();
+    let job = manager
+        .add("https://example.org/report.pdf", dir.path(), None)
+        .unwrap();
+    drop(manager);
+    let connection = rusqlite::Connection::open(dir.path().join("state.sqlite")).unwrap();
+    let mut legacy = serde_json::to_value(&job).unwrap();
+    legacy.as_object_mut().unwrap().remove("category");
+    legacy.as_object_mut().unwrap().remove("scheduled_at");
+    let json = serde_json::to_string(&legacy).unwrap();
+    let digest = format!("{:x}", Sha256::digest(json.as_bytes()));
+    connection
+        .execute(
+            "UPDATE jobs SET json=?1,digest=?2 WHERE id=?3",
+            rusqlite::params![json, digest, job.id],
+        )
+        .unwrap();
+    connection
+        .execute_batch("DROP TABLE settings; PRAGMA user_version=1;")
+        .unwrap();
+    drop(connection);
+    let manager = Manager::open(dir.path(), Options::default()).unwrap();
+    let recovered = manager.get(&job.id).unwrap();
+    assert_eq!(recovered.url, job.url);
+    assert_eq!(recovered.destination, job.destination);
+    assert_eq!(recovered.category, "Documents");
+    assert_eq!(recovered.status, Status::Paused);
+    drop(manager);
+    let connection = rusqlite::Connection::open(dir.path().join("state.sqlite")).unwrap();
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 2);
 }
 #[tokio::test]
 async fn interrupted_publication_recovers_from_same_file_links() {

@@ -129,7 +129,10 @@ pub(crate) async fn run(
                     < manager.settings().concurrent_jobs
                 && jobs
                     .iter()
-                    .find(|j| j.status == Status::Queued)
+                    .find(|j| {
+                        j.status == Status::Queued
+                            && j.scheduled_at.is_none_or(|time| time <= now())
+                    })
                     .is_some_and(|j| j.id == id)
             {
                 let mut job = manager.get(id)?;
@@ -523,7 +526,10 @@ async fn global_throttle(manager: &Manager, bytes: usize) {
         if rate == 0 {
             return;
         }
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::time::sleep(Duration::from_secs_f64(
+            (remaining / rate as f64).min(0.020),
+        ))
+        .await;
         remaining -= last.elapsed().as_secs_f64() * rate as f64;
         last = Instant::now();
         if remaining <= 0.0 {

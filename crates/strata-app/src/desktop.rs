@@ -2,7 +2,7 @@
 use eframe::egui::{self, Color32, RichText};
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, path::PathBuf, sync::mpsc, time::Duration};
-use strata_app::{Command, Reply, download_dir, execute, ipc, shutdown, state_dir};
+use strata_app::{BatchAction, Command, Reply, download_dir, execute, ipc, shutdown, state_dir};
 use strata_core::{Job, Manager, Options, Settings, Status};
 
 #[derive(Serialize, Deserialize)]
@@ -25,13 +25,15 @@ struct App {
     snapshots: mpsc::Receiver<Reply>,
     jobs: Vec<Job>,
     selected: Option<String>,
+    batch_selected: std::collections::HashSet<String>,
+    history_path: String,
     filter: Option<Status>,
     search: String,
     urls: String,
     add_open: bool,
     settings_open: bool,
     engine_settings: Settings,
-    transfer_settings: Option<(String, u64, i32)>,
+    transfer_settings: Option<(String, u64, i32, String, u64)>,
     error: Option<String>,
     delete: Option<String>,
     prefs: Preferences,
@@ -83,6 +85,11 @@ impl App {
             snapshots: snap_rx,
             jobs: vec![],
             selected: None,
+            batch_selected: Default::default(),
+            history_path: download_dir()
+                .join("stratafetch-history.json")
+                .to_string_lossy()
+                .into_owned(),
             filter: None,
             search: String::new(),
             urls: String::new(),
@@ -292,6 +299,20 @@ impl eframe::App for App {
                 style.spacing.item_spacing = egui::vec2(10.0, 10.0);
                 style.spacing.button_padding = egui::vec2(12.0, 7.0);
                 style.visuals.selection.bg_fill = Color32::from_rgb(39, 107, 128);
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Heading, egui::FontId::proportional(24.0));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Body, egui::FontId::proportional(15.0));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+                style.visuals.override_text_color = Some(if self.prefs.dark {
+                    Color32::from_rgb(224, 231, 238)
+                } else {
+                    Color32::from_rgb(30, 42, 56)
+                });
             },
         );
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::N)) {
@@ -396,96 +417,142 @@ impl eframe::App for App {
             .cloned()
         {
             egui::Panel::right("details")
-                .default_size(285.0)
+                .default_size(320.0)
                 .show(root, |ui| {
-                    ui.add_space(15.0);
-                    ui.heading(self.t("Transfer details", "Överföringsdetaljer"));
-                    ui.label(RichText::new(name(&job)).strong());
-                    ui.label(format!("{:?}", job.status));
-                    ui.add(
-                        egui::ProgressBar::new(
-                            job.size
-                                .filter(|n| *n > 0)
-                                .map(|n| job.downloaded as f32 / n as f32)
-                                .unwrap_or(0.0),
-                        )
-                        .show_percentage(),
-                    );
-                    ui.label(format!(
-                        "{} / {}",
-                        bytes(job.downloaded as f64),
-                        job.size
-                            .map(|n| bytes(n as f64))
-                            .unwrap_or_else(|| "Unknown".into())
-                    ));
-                    ui.heading(format!("{} / s", bytes(job.speed)));
-                    ui.label(format!("{} connections", job.connections));
-                    if job.speed > 0.0
-                        && let Some(total) = job.size
-                    {
-                        ui.label(format!(
-                            "~{:.0} s remaining",
-                            total.saturating_sub(job.downloaded) as f64 / job.speed
-                        ));
-                    }
-                    ui.separator();
-                    ui.label(self.t("Segments", "Segment"));
-                    for segment in &job.segments {
-                        let length = segment.end.saturating_sub(segment.start) + 1;
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.add_space(15.0);
+                        ui.heading(self.t("Transfer details", "Överföringsdetaljer"));
+                        ui.label(RichText::new(name(&job)).strong());
+                        ui.label(format!("{:?}", job.status));
                         ui.add(
-                            egui::ProgressBar::new((segment.done as f32 / length as f32).min(1.0))
-                                .text(bytes(segment.done as f64)),
+                            egui::ProgressBar::new(
+                                job.size
+                                    .filter(|n| *n > 0)
+                                    .map(|n| job.downloaded as f32 / n as f32)
+                                    .unwrap_or(0.0),
+                            )
+                            .show_percentage(),
                         );
-                    }
-                    ui.separator();
-                    ui.label(job.destination.to_string_lossy());
-                    ui.label(format!("ID: {}", job.id));
-                    if let Some(hash) = &job.sha256 {
-                        ui.label("SHA-256");
-                        ui.add(egui::Label::new(hash).wrap());
-                    }
-                    if let Some(error) = &job.error {
-                        ui.colored_label(Color32::from_rgb(255, 135, 120), error);
-                    }
-                    ui.add_space(15.0);
-                    self.actions(ui, &job);
-                    ui.separator();
-                    ui.heading("Transfer limits");
-                    if self
-                        .transfer_settings
-                        .as_ref()
-                        .is_none_or(|draft| draft.0 != job.id)
-                    {
-                        self.transfer_settings =
-                            Some((job.id.clone(), job.bytes_per_second, job.priority));
-                    }
-                    let draft = self.transfer_settings.as_mut().unwrap();
-                    ui.label("Bytes / second (0 = unlimited)");
-                    ui.add(
-                        egui::DragValue::new(&mut draft.1)
-                            .range(0..=1_000_000_000u64)
-                            .speed(1024.0),
-                    );
-                    ui.label("Priority (higher runs first)");
-                    ui.add(egui::DragValue::new(&mut draft.2).range(-100..=100));
-                    let command = Command::Configure {
-                        id: job.id.clone(),
-                        bytes_per_second: draft.1,
-                        priority: draft.2,
-                    };
-                    if ui
-                        .add_enabled(
-                            !matches!(
-                                job.status,
-                                Status::Downloading | Status::Queued | Status::Completed
-                            ),
-                            egui::Button::new("Apply transfer limits"),
-                        )
-                        .clicked()
-                    {
-                        self.send(command);
-                    }
-                    ui.small("Pause and wait before changing a transfer.");
+                        ui.label(format!(
+                            "{} / {}",
+                            bytes(job.downloaded as f64),
+                            job.size
+                                .map(|n| bytes(n as f64))
+                                .unwrap_or_else(|| "Unknown".into())
+                        ));
+                        ui.heading(format!("{} / s", bytes(job.speed)));
+                        ui.label(format!("{} connections", job.connections));
+                        if job.speed > 0.0
+                            && let Some(total) = job.size
+                        {
+                            ui.label(format!(
+                                "~{:.0} s remaining",
+                                total.saturating_sub(job.downloaded) as f64 / job.speed
+                            ));
+                        }
+                        ui.separator();
+                        ui.label(self.t("Segments", "Segment"));
+                        for segment in &job.segments {
+                            let length = segment.end.saturating_sub(segment.start) + 1;
+                            ui.add(
+                                egui::ProgressBar::new(
+                                    (segment.done as f32 / length as f32).min(1.0),
+                                )
+                                .text(bytes(segment.done as f64)),
+                            );
+                        }
+                        ui.separator();
+                        ui.label(job.destination.to_string_lossy());
+                        ui.label(format!("ID: {}", job.id));
+                        if let Some(hash) = &job.sha256 {
+                            ui.label("SHA-256");
+                            ui.add(egui::Label::new(hash).wrap());
+                        }
+                        if let Some(error) = &job.error {
+                            ui.colored_label(Color32::from_rgb(255, 135, 120), error);
+                        }
+                        ui.add_space(15.0);
+                        self.actions(ui, &job);
+                        ui.separator();
+                        ui.heading("Transfer limits");
+                        if self
+                            .transfer_settings
+                            .as_ref()
+                            .is_none_or(|draft| draft.0 != job.id)
+                        {
+                            self.transfer_settings = Some((
+                                job.id.clone(),
+                                job.bytes_per_second,
+                                job.priority,
+                                job.category.clone(),
+                                0,
+                            ));
+                        }
+                        let draft = self.transfer_settings.as_mut().unwrap();
+                        ui.label("Bytes / second (0 = unlimited)");
+                        ui.add(
+                            egui::DragValue::new(&mut draft.1)
+                                .range(0..=1_000_000_000u64)
+                                .speed(1024.0),
+                        );
+                        ui.label("Priority (higher runs first)");
+                        ui.add(egui::DragValue::new(&mut draft.2).range(-100..=100));
+                        let command = Command::Configure {
+                            id: job.id.clone(),
+                            bytes_per_second: draft.1,
+                            priority: draft.2,
+                        };
+                        if ui
+                            .add_enabled(
+                                !matches!(
+                                    job.status,
+                                    Status::Downloading | Status::Queued | Status::Completed
+                                ),
+                                egui::Button::new("Apply transfer limits"),
+                            )
+                            .clicked()
+                        {
+                            self.send(command);
+                        }
+                        ui.small("Pause and wait before changing a transfer.");
+                        ui.label(format!("Category: {}", job.category));
+                        if let Some(time) = job.scheduled_at {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+                            ui.label(format!("Scheduled in {} seconds", time.saturating_sub(now)));
+                        }
+                        let draft = self.transfer_settings.as_mut().unwrap();
+                        ui.label("Category");
+                        ui.text_edit_singleline(&mut draft.3);
+                        ui.label("Start after (minutes; 0 = now)");
+                        ui.add(egui::DragValue::new(&mut draft.4).range(0..=525600));
+                        let id = job.id.clone();
+                        let category = draft.3.clone();
+                        let delay = draft.4;
+                        if ui
+                            .add_enabled(
+                                matches!(
+                                    job.status,
+                                    Status::Paused | Status::Failed | Status::Cancelled
+                                ),
+                                egui::Button::new("Save category and queue"),
+                            )
+                            .clicked()
+                        {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs();
+                            self.send(Command::Schedule {
+                                id,
+                                category,
+                                scheduled_at: (delay > 0).then_some(now + delay * 60),
+                            });
+                        }
+                        ui.small("Scheduling requires the app or service to stay running.");
+                    });
                 });
         }
         egui::CentralPanel::default().show(root, |ui| {
@@ -504,6 +571,49 @@ impl eframe::App for App {
                 });
             });
             ui.add_space(10.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("{} selected", self.batch_selected.len()));
+                if ui.button("Select all (up to 256)").clicked() {
+                    self.batch_selected = self
+                        .jobs
+                        .iter()
+                        .filter(|j| {
+                            self.filter.is_none_or(|s| s == j.status)
+                                && format!("{} {} {}", name(j), j.category, j.url)
+                                    .to_lowercase()
+                                    .contains(&self.search.to_lowercase())
+                        })
+                        .take(256)
+                        .map(|j| j.id.clone())
+                        .collect();
+                }
+                if !self.batch_selected.is_empty() && ui.button("Clear selection").clicked() {
+                    self.batch_selected.clear();
+                }
+                if !self.batch_selected.is_empty() {
+                    for (label, action) in [
+                        ("Pause selected", BatchAction::Pause),
+                        ("Resume selected", BatchAction::Resume),
+                        ("Cancel selected", BatchAction::Cancel),
+                    ] {
+                        if ui
+                            .add_enabled(!self.batch_selected.is_empty(), egui::Button::new(label))
+                            .clicked()
+                        {
+                            let ids = self
+                                .jobs
+                                .iter()
+                                .filter(|j| {
+                                    self.batch_selected.contains(&j.id)
+                                        && j.status != Status::Completed
+                                })
+                                .map(|j| j.id.clone())
+                                .collect();
+                            self.send(Command::Batch { ids, action });
+                        }
+                    }
+                }
+            });
             let (rect, _) = ui
                 .allocate_exact_size(egui::vec2(ui.available_width(), 48.0), egui::Sense::hover());
             let max = self.history.iter().copied().fold(1.0, f64::max);
@@ -530,7 +640,9 @@ impl eframe::App for App {
                 .iter()
                 .filter(|j| {
                     self.filter.is_none_or(|s| s == j.status)
-                        && name(j).to_lowercase().contains(&self.search.to_lowercase())
+                        && format!("{} {} {}", name(j), j.category, j.url)
+                            .to_lowercase()
+                            .contains(&self.search.to_lowercase())
                 })
                 .cloned()
                 .collect();
@@ -552,6 +664,18 @@ impl eframe::App for App {
                     egui::Frame::group(ui.style())
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
+                                let mut checked = self.batch_selected.contains(&job.id);
+                                if ui
+                                    .checkbox(&mut checked, "")
+                                    .on_hover_text("Select for batch controls")
+                                    .changed()
+                                {
+                                    if checked && self.batch_selected.len() < 256 {
+                                        self.batch_selected.insert(job.id.clone());
+                                    } else {
+                                        self.batch_selected.remove(&job.id);
+                                    }
+                                }
                                 if ui
                                     .selectable_label(
                                         self.selected.as_ref() == Some(&job.id),
@@ -562,6 +686,7 @@ impl eframe::App for App {
                                     self.selected = Some(job.id.clone());
                                 }
                                 ui.label(format!("{:?}", job.status));
+                                ui.small(&job.category);
                             });
                             ui.add(
                                 egui::ProgressBar::new(
@@ -621,6 +746,8 @@ impl eframe::App for App {
             let mut open = true;
             egui::Window::new(self.t("Settings", "Inställningar"))
                 .open(&mut open)
+                .default_width(520.0)
+                .vscroll(true)
                 .show(&ctx, |ui| {
                     ui.checkbox(&mut self.prefs.dark, "Dark theme / Mörkt tema");
                     ui.checkbox(&mut self.prefs.swedish, "Svenska");
@@ -634,15 +761,24 @@ impl eframe::App for App {
                     ui.add(egui::Slider::new(&mut self.engine_settings.concurrent_jobs, 1..=32));
                     ui.label("Connections for new transfers");
                     ui.add(egui::Slider::new(&mut self.engine_settings.connections, 1..=16));
+                    ui.checkbox(&mut self.engine_settings.organize_by_extension,"Organize new downloads into category subfolders");
                     ui.small("Existing partial files keep their segment layout. Lowering concurrency lets active jobs finish.");
                     if ui.button("Save engine settings").clicked() {
                         self.send(Command::Settings { settings: self.engine_settings.clone() });
                         self.settings_open = false;
                     }
                     ui.label("Downloads are paused after an unexpected shutdown.");
+                    ui.separator();
+                    ui.heading("History recipes");
+                    ui.text_edit_singleline(&mut self.history_path);
+                    ui.small("Exports may contain private URL query tokens. Existing files are preserved. Imports create paused jobs in your default destination.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Export to new JSON file").clicked() { self.send(Command::ExportHistory {path:PathBuf::from(&self.history_path)}); }
+                        if ui.button("Import JSON recipes").clicked() { self.send(Command::ImportHistory {path:PathBuf::from(&self.history_path),directory:PathBuf::from(&self.prefs.folder)}); }
+                    });
                     ui.label("No telemetry, accounts, or background clipboard monitoring.");
                 });
-            self.settings_open = open;
+            self.settings_open = open && self.settings_open;
         }
         if let Some(id) = self.delete.clone() {
             egui::Window::new(self.t("Remove download?", "Ta bort nedladdning?"))
@@ -680,6 +816,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
+            .with_icon(std::sync::Arc::new(strata_app::branding::icon()))
             .with_inner_size([1180.0, 760.0])
             .with_min_inner_size([800.0, 500.0]),
         ..Default::default()

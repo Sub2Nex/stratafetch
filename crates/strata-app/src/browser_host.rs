@@ -24,8 +24,14 @@ fn run() -> Result<()> {
                 _ => anyhow::bail!("Unknown action"),
             };
             let reply = runtime.block_on(ipc::call(&state_dir(), command))?;
-            strata_app::check_reply(reply)?;
-            Ok(serde_json::json!({"ok":true}))
+            let reply = strata_app::check_reply(reply)?;
+            let job = reply
+                .accepted_id
+                .as_ref()
+                .and_then(|id| reply.jobs.iter().find(|job| &job.id == id));
+            Ok(
+                serde_json::json!({"ok":true,"active":reply.jobs.iter().filter(|job|matches!(job.status,strata_core::Status::Downloading|strata_core::Status::Queued)).count(),"download":job.map(|job|serde_json::json!({"id":job.id,"filename":job.destination.file_name().unwrap_or_default().to_string_lossy(),"status":job.status}))}),
+            )
         })();
         let response = match result {
             Ok(value) => value,

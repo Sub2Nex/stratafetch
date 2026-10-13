@@ -1,4 +1,5 @@
 //! Local-first download engine. See [`Manager`] and [`Options`].
+pub mod history;
 pub mod network;
 pub mod storage;
 
@@ -52,6 +53,10 @@ pub struct Job {
     pub completed: Option<u64>,
     pub priority: i32,
     pub bytes_per_second: u64,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub scheduled_at: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +86,8 @@ pub struct Settings {
     pub concurrent_jobs: usize,
     /// Aggregate payload bytes per second; zero means unlimited.
     pub global_bytes_per_second: u64,
+    #[serde(default)]
+    pub organize_by_extension: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -88,6 +95,7 @@ impl Default for Settings {
             connections: 4,
             concurrent_jobs: 3,
             global_bytes_per_second: 0,
+            organize_by_extension: false,
         }
     }
 }
@@ -115,9 +123,26 @@ impl Manager {
             connections: options.connections.clamp(1, 16),
             concurrent_jobs: options.concurrent_jobs.clamp(1, 32),
             global_bytes_per_second: 0,
+            organize_by_extension: false,
         });
+        anyhow::ensure!(
+            (1..=16).contains(&settings.connections)
+                && (1..=32).contains(&settings.concurrent_jobs),
+            "Invalid persisted engine limits"
+        );
         let mut jobs = store.load()?;
         for job in jobs.values_mut() {
+            if job.category.is_empty() {
+                job.category = category_for(
+                    job.destination
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .as_ref(),
+                )
+                .to_owned();
+                store.save(job)?;
+            }
             if storage::recover_published(job)? {
                 store.save(job)?;
                 if job.status == Status::Completed {
@@ -135,7 +160,7 @@ impl Manager {
             .redirect(reqwest::redirect::Policy::limited(options.redirect_limit))
             .connect_timeout(std::time::Duration::from_secs(20))
             .read_timeout(std::time::Duration::from_secs(60))
-            .user_agent("StrataFetch/0.1.0");
+            .user_agent(concat!("StrataFetch/", env!("CARGO_PKG_VERSION")));
         if let Some(proxy) = &options.proxy {
             builder = builder.proxy(reqwest::Proxy::all(proxy)?);
         }
@@ -200,13 +225,24 @@ impl Manager {
             bail!("Credentials in URLs are not supported");
         }
         std::fs::create_dir_all(directory)?;
-        let directory = directory.canonicalize()?;
+        let mut directory = directory.canonicalize()?;
         let filename = sanitize_filename(name.unwrap_or_else(|| {
             url.path_segments()
                 .and_then(|mut s| s.next_back())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("download")
         }));
+        let category = category_for(&filename).to_owned();
+        if self.settings().organize_by_extension {
+            directory = directory.join(&category);
+            std::fs::create_dir_all(&directory)?;
+            let organized = directory.canonicalize()?;
+            anyhow::ensure!(
+                organized.parent() == directory.parent(),
+                "Category folder must not redirect outside the destination"
+            );
+            directory = organized;
+        }
         let jobs = self.list();
         let mut destination = directory.join(&filename);
         for index in 1..10000 {
@@ -242,6 +278,8 @@ impl Manager {
             completed: None,
             priority: 0,
             bytes_per_second: 0,
+            category,
+            scheduled_at: None,
         };
         self.update(job.clone())?;
         Ok(job)
@@ -386,6 +424,40 @@ impl Manager {
         job.priority = priority;
         job.bytes_per_second = bytes_per_second;
         self.update(job)
+    }
+    /// Changes classification and a UTC Unix start time without moving partial data.
+    pub fn schedule(&self, id: &str, category: &str, scheduled_at: Option<u64>) -> Result<()> {
+        let controls = self.0.controls.lock().unwrap();
+        anyhow::ensure!(
+            !controls.contains_key(id),
+            "Pause and wait before scheduling"
+        );
+        let mut job = self.get(id)?;
+        anyhow::ensure!(
+            job.status != Status::Completed,
+            "Completed downloads cannot be scheduled"
+        );
+        job.category = sanitize_filename(category);
+        job.scheduled_at = scheduled_at;
+        self.update(job)
+    }
+}
+
+pub fn category_for(filename: &str) -> &'static str {
+    match std::path::Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "mp4" | "mkv" | "webm" | "mov" | "avi" => "Video",
+        "mp3" | "flac" | "wav" | "ogg" | "m4a" => "Audio",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" => "Images",
+        "pdf" | "txt" | "doc" | "docx" | "xlsx" | "csv" | "epub" => "Documents",
+        "zip" | "7z" | "rar" | "tar" | "gz" => "Archives",
+        "exe" | "msi" | "msix" => "Applications",
+        _ => "Other",
     }
 }
 

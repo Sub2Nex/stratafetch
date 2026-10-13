@@ -94,11 +94,10 @@ impl Store {
         let connection = Connection::open(directory.join("state.sqlite"))?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         anyhow::ensure!(
-            version <= 1,
+            version <= 2,
             "State database was created by a newer StrataFetch version"
         );
-        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, json TEXT NOT NULL, digest TEXT NOT NULL); PRAGMA user_version=1;")?;
-        connection.execute_batch("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL);")?;
+        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, json TEXT NOT NULL, digest TEXT NOT NULL); CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL); PRAGMA user_version=2; COMMIT;")?;
         Ok(Self {
             connection,
             _lock: lock,

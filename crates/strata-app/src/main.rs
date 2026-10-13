@@ -3,7 +3,11 @@ use std::path::PathBuf;
 use strata_app::{Command, check_reply, download_dir, execute, ipc, shutdown, state_dir};
 use strata_core::{Manager, Options, Settings, Status};
 #[derive(Parser)]
-#[command(version, about = "StrataFetch — local-first HTTP download manager")]
+#[command(
+    name = "stratafetch",
+    version,
+    about = "StrataFetch — local-first HTTP download manager"
+)]
 struct Args {
     #[arg(long, global = true)]
     state: Option<PathBuf>,
@@ -17,6 +21,14 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Action {
+    Export {
+        path: PathBuf,
+    },
+    Import {
+        path: PathBuf,
+        #[arg(long)]
+        directory: PathBuf,
+    },
     /// Persist engine limits. Rate is aggregate bytes/second; zero is unlimited.
     Settings {
         #[arg(long, default_value_t = 4)]
@@ -25,6 +37,15 @@ enum Action {
         concurrent_jobs: usize,
         #[arg(long, default_value_t = 0)]
         global_bytes_per_second: u64,
+        #[arg(long)]
+        organize_by_extension: bool,
+    },
+    /// Queue an inactive job for a Unix UTC start time (desktop/service must stay running).
+    Schedule {
+        id: String,
+        unix_time: u64,
+        #[arg(long, default_value = "Other")]
+        category: String,
     },
     Add {
         url: String,
@@ -81,16 +102,29 @@ async fn main() -> anyhow::Result<()> {
         Action::Add { .. } | Action::Resume { .. } | Action::Restart { .. }
     );
     let command = match args.command {
+        Action::Export { path } => Command::ExportHistory { path },
+        Action::Import { path, directory } => Command::ImportHistory { path, directory },
         Action::Settings {
             connections,
             concurrent_jobs,
             global_bytes_per_second,
+            organize_by_extension,
         } => Command::Settings {
             settings: Settings {
                 connections,
                 concurrent_jobs,
                 global_bytes_per_second,
+                organize_by_extension,
             },
+        },
+        Action::Schedule {
+            id,
+            unix_time,
+            category,
+        } => Command::Schedule {
+            id,
+            category,
+            scheduled_at: Some(unix_time),
         },
         Action::Add {
             url,

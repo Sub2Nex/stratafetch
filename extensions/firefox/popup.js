@@ -2,7 +2,7 @@ const status = document.getElementById("status");
 async function message(payload) {
   try {
     const reply = await browser.runtime.sendNativeMessage("org.stratafetch.host", payload);
-    status.textContent = reply.ok ? (payload.action === "ping" ? "Connected to StrataFetch" : "Download added") : reply.error;
+    status.textContent = reply.ok ? (payload.action === "ping" ? `Connected · ${reply.active ?? 0} active or queued` : `Added: ${reply.download?.filename ?? "download"} (${reply.download?.status ?? "queued"})`) : reply.error;
   } catch { status.textContent = "StrataFetch is unavailable. Start the app and register the native host."; }
 }
 document.getElementById("current").onclick = async () => {

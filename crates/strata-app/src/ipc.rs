@@ -144,8 +144,12 @@ async fn handle(mut stream: impl AsyncRead + AsyncWrite + Unpin, manager: Manage
     let request: Request =
         tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut stream)).await??;
     ensure!(request.version == 1, "Unsupported IPC version");
-    let reply = execute(&manager, request.command);
-    write_frame(&mut stream, &reply).await
+    let reply = tokio::task::spawn_blocking(move || execute(&manager, request.command)).await?;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        write_frame(&mut stream, &reply),
+    )
+    .await?
 }
 pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
     let capacity = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
@@ -161,7 +165,9 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
             let permit = capacity.clone().acquire_owned().await?;
             tokio::spawn(async move {
                 let _permit = permit;
-                let _ = handle(connected, manager).await;
+                if let Err(error) = handle(connected, manager).await {
+                    eprintln!("Local control request failed: {error:#}");
+                }
             });
         }
     }
@@ -180,7 +186,9 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
             let permit = capacity.clone().acquire_owned().await?;
             tokio::spawn(async move {
                 let _permit = permit;
-                let _ = handle(connected, manager).await;
+                if let Err(error) = handle(connected, manager).await {
+                    eprintln!("Local control request failed: {error:#}");
+                }
             });
         }
     }
