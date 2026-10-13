@@ -32,3 +32,7 @@ On machines with little free memory, pass -j 1 to Cargo commands. Final local pa
 Run ./packaging/verify-package.ps1 to compare archive/build hashes and source metadata, then ./packaging/test-installer.ps1 for an isolated install/uninstall roundtrip. These scripts run locally. The installer test stops if an existing user installation or Start Menu folder would be affected.
 
 Final alpha installer execution was blocked by Windows application control on the build machine. It is compiled and hash-verified, but its final installation roundtrip is unverified. The earlier preview roundtrip passed. The portable release binaries passed native/CLI execution checks. Do not disable protection to run the installer.
+
+## Alpha.2 portable-only release
+
+The desktop redesign prerelease includes the portable ZIP and SHA256SUMS. No new installer roundtrip is claimed. The NSIS sections above describe the historical alpha.1 package and optional installer source. For alpha.2, build from the committed source, run ./packaging/portable.ps1, then ./packaging/verify-package.ps1 -PortableOnly. Close older desktop/service instances before running the new version. Do not mix old engine processes with the new desktop's additive paused-add commands.

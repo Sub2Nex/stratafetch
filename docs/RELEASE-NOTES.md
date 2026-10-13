@@ -1,26 +1,23 @@
-# StrataFetch v0.1.0-alpha.1
+# StrataFetch v0.1.0-alpha.2 — desktop redesign
 
-An experimental, unsigned Windows x64 release of the existing native Rust download manager. All validation and packaging run locally; GitHub Actions is disabled. This is not a production-ready release.
+An experimental, unsigned Windows x64 prerelease. All validation and packaging run locally. GitHub Actions remains disabled; no hosted CI or billing configuration is used. Alpha.1 is preserved.
 
-## Included
+## Changes
 
-- Aggregate and per-download bandwidth limits, persisted concurrency and connection controls.
-- Category folders, scheduled starts while the engine is running, priorities and batch pause/resume/cancel.
-- Safe JSON download-recipe export/import; imports create paused jobs with fresh IDs.
-- Improved native typography, scrolling details, search and original window/installer branding.
-- Native host connection/download reporting, exact-origin checks and per-user registration cleanup.
-- Portable ZIP and per-user NSIS installer, plus SHA256SUMS. Installer source is designed to preserve download state and completed files. Earlier preview installation/uninstallation passed; execution of this final unsigned installer was blocked by Windows application control here, so its final roundtrip is not verified. The portable binaries passed actual execution checks.
+- Compact vector toolbar, navigation tree, full-width sortable table and small status bar replace the dashboard.
+- Virtualized 32-pixel rows, configurable/resizable columns, unified Ctrl/Shift selection, keyboard navigation, context menus and double-click details.
+- Async metadata checks, single/batch Add, paused Download later and on-demand transfer tabs.
+- Organized settings, scheduler, measured statistics on demand, both themes and persisted preferences.
+- Existing Rust engine, schema 2, IDs, checkpoints, CLI, IPC and browser handoff are preserved. Close older desktop/service instances before upgrading.
 
-## Local evidence
+## Local verification
 
-Complete Windows workspace suite: 32 substantive tests, all executable wrappers and doc-test targets pass. Formatting, Clippy with warnings denied and dependency/advisory/license checks pass. Real CLI/native-host/IPC transfers, service-kill recovery and checksum verification pass. Native framebuffer captured from the working desktop. Five-cycle pause/resume and preview-schema migration are covered.
+43 substantive workspace tests pass, including real egui pointer/key events and 5,000-row virtualization. Formatting, Clippy, refreshed vulnerability checks and dependency/license policies pass. Release crates were cleaned and rebuilt. Genuine native captures cover four requested resolutions, simulated 150%/200% layouts and 1,005 real records. CLI/native-host/IPC crash-and-resume transfers match the independently checked 8 MiB checksum. See PHASE3.md and PHASE3-CAPTURES.json.
 
-A deterministic 4 GiB file completed with 1.37 GiB free physical memory at start and about 18.8 MiB sampled CLI working-set peak. Independently generated and reread SHA-256 values match. This is a local workload measurement, not a universal speed or memory claim.
+## Downloads and limits
 
-## Important limits
+Portable ZIP and SHA256SUMS; no new installer. Binaries have no verified publisher signature. Windows application control may reject them; do not disable protection. One earlier CLI build was rejected locally; the clean rebuild and actual execution checks passed normally.
 
-Binaries and installer are unsigned and have no verified publisher signature. Windows application control may reject unsigned executables; do not disable security protection to run them. Linux/macOS builds are not verified. Browser extensions are experimental: native host/IPC/registration were tested, but installed-browser end-to-end flows were not. Full native keyboard/high-DPI/accessibility review, disk-full/permission/power-loss faults, cross-user IPC denial and reparse-point races remain open. Large histories need IPC pagination and scalable queue dispatch.
+Browser integration remains experimental; installed-browser flows are unverified. Actual Windows display-scaling/monitor transitions and full manual accessibility/OS file-opening review remain open. Linux/macOS, further fault injection and cross-user IPC denial are unverified. IPC pagination and scalable queue dispatch still limit very large histories/queues. This is not a stable or production-readiness claim.
 
-Tray, notifications, autostart, background clipboard detection, drag/drop, configurable shortcuts, authenticated requests, mirrors and adaptive segmentation are not implemented. Scheduling requires a running engine and interrupted jobs reopen paused. Existing partial files retain their segment layout. Import/export contains URL query tokens; keep exports private. History import restores recipes, not trusted completed status or checkpoints.
-
-This version migrates state from preview schema 1 to schema 2. Older preview binaries reject the upgraded database. Back up state before experimenting with downgrades. Read INSTALLATION.md, PHASE2.md and SECURITY-REVIEW-PHASE2.md for reproducible instructions and evidence.
+Scheduling requires a running engine; interrupted jobs reopen paused. Descriptions/completion choices are desktop preferences. Recipe imports create paused jobs with new IDs and do not restore trusted checkpoints/status. Exports may contain private URL query tokens; keep them private.

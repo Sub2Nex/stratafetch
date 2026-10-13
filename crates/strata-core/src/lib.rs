@@ -1,5 +1,6 @@
 //! Local-first download engine. See [`Manager`] and [`Options`].
 pub mod history;
+pub mod metadata;
 pub mod network;
 pub mod storage;
 

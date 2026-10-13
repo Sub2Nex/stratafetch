@@ -28,6 +28,12 @@ pub fn download_dir() -> PathBuf {
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Command {
     List,
+    AddPaused {
+        url: String,
+        directory: PathBuf,
+        name: Option<String>,
+        category: String,
+    },
     Batch {
         ids: Vec<String>,
         action: BatchAction,
@@ -83,6 +89,7 @@ pub enum BatchAction {
     Pause,
     Resume,
     Cancel,
+    Remove,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reply {
@@ -108,6 +115,18 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
     let result: Result<()> = (|| {
         match command {
             Command::List => (),
+            Command::AddPaused {
+                url,
+                directory,
+                name,
+                category,
+            } => {
+                let job = manager.add(&url, &directory, name.as_deref())?;
+                accepted_id = Some(job.id.clone());
+                if !category.is_empty() {
+                    manager.schedule(&job.id, &category, None)?;
+                }
+            }
             Command::Batch { ids, action } => {
                 anyhow::ensure!(ids.len() <= 256, "Batch limited to 256 downloads");
                 let mut errors = Vec::new();
@@ -116,6 +135,7 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
                         BatchAction::Pause => manager.pause(&id),
                         BatchAction::Resume => manager.start(&id),
                         BatchAction::Cancel => manager.cancel(&id),
+                        BatchAction::Remove => manager.remove(&id),
                     };
                     if let Err(error) = result {
                         errors.push(format!("{id}: {error}"));

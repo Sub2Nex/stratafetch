@@ -23,3 +23,7 @@ An exclusive state lock prevents competing writers. IPC uses named pipes on Wind
 Phase 2 adds categories, optional extension folders, per-job UTC start times, runtime concurrency/connection settings, global throttling, bounded batch controls and history recipes. The queue skips future jobs and admits due jobs by priority/FIFO. Settings survive engine restarts. Schedules require a running engine and interrupted queued work reopens paused. Imports recreate paused jobs with fresh IDs; exported absolute paths and checkpoint state are never restored. Active partial downloads keep their segment layout when defaults change.
 
 Protocol adapters, dynamic segment splitting, structured authenticated requests, HLS/DASH parsers and muxing, and explicit remote control can be added behind core interfaces. These are not implemented in this preview. IPC history pagination and replacing one polling task per queued job with a scalable dispatcher remain important before very large histories/queues are supported confidently.
+
+## Desktop separation
+
+Phase 3 keeps desktop.rs as the launcher. UI modules separate preferences/selection, original icons/theme, toolbar/tree/table and dialogs. The asynchronous worker isolates blocking engine commands and keeps one latest snapshot. Rendering is virtualized; IDs remain engine IDs. Metadata is an independent header-only helper. AddPaused and batch Remove are additive commands; existing Add still starts transfers. No schema/checkpoint change is introduced.

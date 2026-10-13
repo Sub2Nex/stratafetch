@@ -9,9 +9,11 @@ Follow RELEASE-CHECKLIST.md before publishing. Experimental Windows prereleases 
 ```sh
 git tag -a VERSION -m 'StrataFetch VERSION'
 git push origin VERSION
-gh release create VERSION dist/stratafetch-windows-x64.zip dist/stratafetch-windows-x64-setup.exe dist/SHA256SUMS --prerelease --title 'StrataFetch VERSION' --notes-file docs/RELEASE-NOTES.md
+gh release create VERSION dist/stratafetch-windows-x64.zip dist/SHA256SUMS --prerelease --title 'StrataFetch VERSION' --notes-file docs/RELEASE-NOTES.md
 ```
 
 These are publication instructions; the Releases page is authoritative about published versions. Hosted checks are neither invoked nor claimed.
 
-Published Windows alpha: https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.1. Release source: d8cda2737db90c9776c82f6018b0987c27634040. Subsequent main-branch commits update documentation only. To reproduce/verify the published package against its exact source metadata, check out v0.1.0-alpha.1.
+Published Windows alpha: https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.1. Release source: d8cda2737db90c9776c82f6018b0987c27634040. That tag preserves the original release; current main includes the Phase 3 redesign. To reproduce/verify the published package against its exact source metadata, check out v0.1.0-alpha.1.
+
+Phase 3 source and local native UI evidence are documented in PHASE3.md. The alpha.2 prerelease publishes only the portable ZIP and SHA256SUMS; do not attach an older installer to that tag. Alpha.1 remains historical and immutable. BUILD.txt identifies each portable artifact's exact source commit.

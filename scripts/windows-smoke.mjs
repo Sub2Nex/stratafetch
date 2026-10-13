@@ -70,7 +70,7 @@ try {
   assert.equal(createHash('sha256').update(readFileSync(completed.destination)).digest('hex'), expected);
   run(['verify', added.download.id, expected]);
   const unavailable = await native({ action: 'ping' }); assert.equal(unavailable.ok, false);
-  const screenshot = join(root, 'docs/screenshot-phase2.png');
+  const screenshot = process.env.STRATAFETCH_SMOKE_IMAGE ? resolve(process.env.STRATAFETCH_SMOKE_IMAGE) : join(root, 'docs/screenshot-phase2.png');
   const desktop = spawn(join(root, 'target/release/stratafetch-desktop.exe'), [], { env: { ...env, STRATAFETCH_SMOKE_OUTPUT: screenshot }, windowsHide: false });
   assert.equal(await waitExit(desktop), 0);
   assert.ok(readFileSync(screenshot).length > 1000);

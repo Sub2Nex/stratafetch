@@ -30,10 +30,11 @@ open = "5"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
+egui_extras = { version = "=0.36.2", default-features = false, features = ["serde"] }
+time = { version = "0.3.47", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation"] }
-

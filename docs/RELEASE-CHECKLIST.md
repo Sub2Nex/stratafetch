@@ -1,3 +1,7 @@
+# Current prerelease verification
+
+For the Phase 3 redesign and 43-test local record, see PHASE3.md. Alpha.2 is portable-only. The checklist below also retains historical Phase 2/installer evidence; installer and full platform/browser/manual gates remain distinct. GitHub Actions stays disabled.
+
 # Reproducible release checklist
 
 - [x] Build and test the baseline from `git archive HEAD` with a fresh target directory.
@@ -8,7 +12,7 @@
 - [x] Verify runtime aggregate/concurrency controls, persisted settings and scheduled priority ordering.
 - [x] Verify native desktop launch/framebuffer and actual CLI/native-host/IPC downloads.
 - [x] Build portable ZIP and per-user NSIS installer; test isolated install/uninstall and preserve unrelated data.
-- [x] Publish public source with original branding, licenses, build docs and workflows.
+- [x] Publish public source with original branding, licenses and local build docs.
 - [ ] Perform full native control/keyboard/high-DPI/accessibility walkthrough and light/dark layout review.
 - [ ] Perform actual Chrome/Edge/Firefox extension-to-application flows, or retain explicit experimental status.
 - [ ] Fault-inject disk full, permission denial, power loss and reparse-point races; validate cross-user IPC denial.

@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-13T19:02:10.537Z",
+  "fixtureRecords": {
+    "empty": 0,
+    "one": 1,
+    "mixed": 29,
+    "many": 1005
+  },
+  "scaling": "egui pixels-per-point simulation; Windows system display scaling was not changed",
+  "captures": [
+    {
+      "label": "empty",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-empty.png"
+    },
+    {
+      "label": "one",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-one.png"
+    },
+    {
+      "label": "dark",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-dark.png"
+    },
+    {
+      "label": "light",
+      "width": 1366,
+      "height": 768,
+      "theme": "light",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-light.png"
+    },
+    {
+      "label": "1920",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-1920.png"
+    },
+    {
+      "label": "2560",
+      "width": 2560,
+      "height": 1440,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-2560.png"
+    },
+    {
+      "label": "scale150",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1.5,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-scale150.png"
+    },
+    {
+      "label": "scale200",
+      "width": 1280,
+      "height": 720,
+      "theme": "light",
+      "scale": 2,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-scale200.png"
+    },
+    {
+      "label": "transfer",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "transfer",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-transfer.png"
+    },
+    {
+      "label": "settings",
+      "width": 1280,
+      "height": 720,
+      "theme": "light",
+      "scale": 1,
+      "view": "settings",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-settings.png"
+    },
+    {
+      "label": "add",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "add",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-add.png"
+    },
+    {
+      "label": "scheduler",
+      "width": 1280,
+      "height": 720,
+      "theme": "dark",
+      "scale": 1,
+      "view": "scheduler",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-scheduler.png"
+    },
+    {
+      "label": "many",
+      "width": 1920,
+      "height": 1080,
+      "theme": "dark",
+      "scale": 1,
+      "view": "",
+      "path": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase3-many.png"
+    }
+  ]
+}

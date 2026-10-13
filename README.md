@@ -4,9 +4,13 @@ A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
 **Experimental Windows alpha — stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
-Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Published Windows alpha](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.1). [Release gates and evidence](docs/PHASE2.md) describe the locally tested alpha and its remaining limits.
+Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Windows prereleases](https://github.com/Sub2Nex/stratafetch/releases). [Desktop redesign and local evidence](docs/PHASE3.md) describe the locally tested alpha and its remaining limits.
 
-![Actual StrataFetch desktop after a verified crash-and-resume fixture transfer](docs/screenshot-phase2.png)
+![Actual redesigned StrataFetch desktop with a real active transfer](docs/screenshot-phase3-dark.png)
+
+![Actual light theme](docs/screenshot-phase3-light.png)
+
+![Actual on-demand transfer details](docs/screenshot-phase3-transfer.png)
 
 ## Run
 
@@ -19,7 +23,7 @@ cargo build --release --locked
 cargo run --release --bin stratafetch-desktop
 ```
 
-The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open Add Download with Ctrl+N. You can paste several URLs, one per line. Set the destination in Settings or the Add dialog. Select a download to view segments, checksum, and transfer controls. Partial transfers remain paused after a restart. Completed files are never automatically executed. Native launch and rendering are verified; the full manual interaction checklist remains outstanding.
+The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open Add Download with Ctrl+N. You can paste several URLs, one per line. Set the destination in Settings or the Add dialog. The compact toolbar and navigation tree surround a sortable, resizable 32-pixel download table. Single-click selects; Ctrl-click toggles; Shift-click selects a range; Ctrl+A selects the current view. Double-click or Enter/F2 opens transfer details. Use View to choose/reorder columns or hide navigation. Metadata checks read headers without creating a job; Download later creates a paused job. Statistics, settings and scheduler open on demand. Partial transfers remain paused after a restart. Completed files are never automatically executed. Native rendering, selected interactions and local input-event regression tests are verified. See PHASE3.md for remaining manual DPI/accessibility checks.
 
 ## CLI
 
@@ -55,11 +59,11 @@ With a desktop or `serve` instance running, commands use local IPC. Without one,
 | Integrity | SHA-256 partial-prefix and completed-file checksums; GUI/CLI can re-read completed files for verification |
 | Concurrency | Three active jobs by default; queued jobs ordered by priority |
 | Limits | Aggregate bandwidth through GUI/CLI; per-download GUI/CLI limits and priority; pause before changing job settings |
-| Native desktop | Real progress, measured speed, speed graph, search, status filters, details, context menus |
-| Preferences | Destination, light/dark theme, core English/Swedish labels, window geometry |
+| Native desktop | Virtualized sortable table, unified selection, original vector toolbar, tree filters, async Add dialog, tabbed transfer details; measured statistics on demand |
+| Preferences | Destination, light/dark theme, core English/Swedish labels, window/sidebar/table widths and column order, completion options |
 | Browser handoff | Experimental Chrome/Edge/Firefox extensions and Rust native host; manual registration |
 | Scheduling/categories | Scheduled UTC starts while engine runs; categories, optional extension subfolders, priority/FIFO queues |
-| Batch controls/history recipes | Select up to 256 jobs for pause/resume/cancel; bounded JSON exports/imports recreate paused recipes |
+| Batch controls/history recipes | GUI batches pause/resume/cancel/remove in groups of 256; bounded JSON exports/imports recreate paused recipes |
 | Tray, notifications, clipboard monitoring, drag/drop | Planned |
 | Authentication/custom headers | Planned; no embedded URL credentials accepted |
 | HLS/DASH/DRM | Unsupported; direct MP4/WebM URLs work as ordinary files |
@@ -80,7 +84,7 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 Windows x64 is the locally verified primary build target. Linux x64 and macOS remain unverified. All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
 
-Download the unsigned [portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/stratafetch-windows-x64.zip), [experimental installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/stratafetch-windows-x64-setup.exe), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/SHA256SUMS). The portable CLI/desktop passed actual execution checks. Windows application control blocked the final installer on the build machine, so its final install/uninstall roundtrip is unverified; an earlier preview passed. Installer source preserves download data. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) reproduce the local build.
+Download the unsigned [alpha.2 portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/stratafetch-windows-x64.zip) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/SHA256SUMS). Alpha.2 includes no new installer. The historical alpha.1 installer remains experimental; its final unsigned build was blocked by application control here. Do not disable protection. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) reproduce the local build.
 
 History exports contain URLs, including any query tokens. Keep them private. Imports do not restore checkpoints or completed status and never start transfers automatically. Schedules need a running desktop/service and reopen paused after shutdown. Engine settings persist in SQLite; existing partial files keep their segment layouts.
 

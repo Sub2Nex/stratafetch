@@ -13,6 +13,68 @@ use strata_core::{Manager, Options, Status};
 use tempfile::TempDir;
 
 #[tokio::test]
+async fn metadata_probe_uses_headers_and_handles_head_fallback_without_creating_jobs() {
+    use axum::http::Method;
+    use axum::routing::any;
+    let gets = Arc::new(AtomicUsize::new(0));
+    let observed = gets.clone();
+    let app = Router::new()
+        .route(
+            "/headers",
+            any(move |method: Method| {
+                let observed = observed.clone();
+                async move {
+                    if method == Method::GET {
+                        observed.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Response::builder()
+                        .header("content-length", "12345")
+                        .header(
+                            "content-disposition",
+                            "attachment; filename*=UTF-8''my%20archive.zip",
+                        )
+                        .body(Body::empty())
+                        .unwrap()
+                }
+            }),
+        )
+        .route(
+            "/fallback",
+            any(|method: Method, headers: HeaderMap| async move {
+                if method == Method::HEAD {
+                    return Response::builder().status(405).body(Body::empty()).unwrap();
+                }
+                assert_eq!(headers.get("range").unwrap(), "bytes=0-0");
+                Response::builder()
+                    .status(206)
+                    .header("content-range", "bytes 0-0/98765")
+                    .header("content-length", "1")
+                    .body(Body::from("x"))
+                    .unwrap()
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(dir.path(), Default::default()).unwrap();
+    let metadata = strata_core::metadata::probe(&format!("http://{address}/headers"))
+        .await
+        .unwrap();
+    assert_eq!(metadata.size, Some(12345));
+    assert_eq!(metadata.filename, "my archive.zip");
+    assert_eq!(gets.load(Ordering::SeqCst), 0);
+    let fallback = strata_core::metadata::probe(&format!("http://{address}/fallback"))
+        .await
+        .unwrap();
+    assert_eq!(fallback.size, Some(98765));
+    assert!(manager.list().is_empty());
+    task.abort();
+}
+
+#[tokio::test]
 async fn aggregate_bandwidth_is_shared_and_settings_survive_reopen() {
     let (url, state, task) = server(0, 128 * 1024).await;
     let dir = TempDir::new().unwrap();

@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased — 0.1.0 development preview
+## 0.1.0-alpha.2 — 2026-10-13
+
+Native desktop redesign: compact vector toolbar, navigation tree, virtualized sortable/resizable table, unified selection and keyboard input, async metadata/Add dialog, transfer tabs, organized settings/scheduler and both themes. Preserves engine/storage/CLI/browser behavior; adds paused-add and batch-remove commands. 43 local tests and authentic captures are documented in docs/PHASE3.md. Portable prerelease; unsigned/browser/DPI limits remain explicit. GitHub Actions stays disabled.
+
+## 0.1.0-alpha.1 — development preview
 
 Phase 2: public source repository, persisted global bandwidth/concurrency/connections, GUI per-job limits and priorities, category folders, timed starts, batch controls, safe JSON recipe export/import, improved typography/scrolling/branding, serialized destination reservations and queue admission, IPC blocking-work isolation/timeouts, native-host status/download reporting and registration cleanup, and a per-user NSIS installer. Full workspace tests, real crash-and-resume/native-host checks, streaming large-file measurements and isolated installer checks are documented in docs/PHASE2.md. Browser extensions and release acceptance remain experimental; Validation and packaging are local; GitHub Actions is disabled by request.
 

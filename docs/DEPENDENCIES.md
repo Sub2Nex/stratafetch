@@ -1,8 +1,8 @@
 # Dependency notices
 
-The portable package includes THIRD-PARTY-LICENSES.txt with available license and notice files from 468 locked dependency packages, including cross-platform and development dependencies. Bundled fonts and trust-root data retain their original licenses.
+The portable package includes THIRD-PARTY-LICENSES.txt with available license and notice files from 476 locked dependency packages, including cross-platform and development dependencies. Bundled fonts and trust-root data retain their original licenses.
 
-54 upstream crates do not ship a separate license text in their published package; their SPDX declaration and source link are recorded:
+57 upstream crates do not ship a separate license text in their published package; their SPDX declaration and source link are recorded:
 
 - accesskit@0.24.1
 - block2@0.5.1
@@ -12,11 +12,14 @@ The portable package includes THIRD-PARTY-LICENSES.txt with available license an
 - dispatch2@0.3.1
 - ecolor@0.36.2
 - eframe@0.36.2
+- egui_extras@0.36.2
 - egui_glow@0.36.2
 - egui-wgpu@0.36.2
 - egui-winit@0.36.2
 - egui@0.36.2
 - emath@0.36.2
+- enum-map-derive@0.17.0
+- enum-map@2.7.3
 - epaint@0.36.2
 - gl_generator@0.14.0
 - jni-macros@0.22.4

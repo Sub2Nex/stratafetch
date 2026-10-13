@@ -1,3 +1,4 @@
+param([switch]$PortableOnly)
 $ErrorActionPreference = 'Stop'
 $workspacePath = Split-Path -Parent $PSScriptRoot
 $archivePath = Join-Path $workspacePath 'dist\stratafetch-windows-x64.zip'
@@ -28,5 +29,5 @@ foreach ($line in Get-Content -LiteralPath (Join-Path $workspacePath 'dist\SHA25
     $actual = (Get-FileHash -LiteralPath (Join-Path $workspacePath "dist\$name") -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $expectedHash) {throw "Package checksum mismatch: $name"}
 }
-if ((Get-AuthenticodeSignature -LiteralPath (Join-Path $workspacePath 'dist\stratafetch-windows-x64-setup.exe')).Status -ne 'NotSigned') {throw 'Review unexpected installer signature status'}
-Write-Output 'ZIP executable hashes, required files, source revision, artifact checksums and unsigned installer status verified.'
+if (-not $PortableOnly -and (Get-AuthenticodeSignature -LiteralPath (Join-Path $workspacePath 'dist\stratafetch-windows-x64-setup.exe')).Status -ne 'NotSigned') {throw 'Review unexpected installer signature status'}
+Write-Output 'ZIP executable hashes, required files, source revision and artifact checksums verified. Installer checked only when requested.'

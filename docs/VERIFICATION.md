@@ -1,5 +1,7 @@
 # Verification record
 
+The current desktop redesign and 43-test local record are in [PHASE3.md](PHASE3.md). The material below is historical Phase 1/2 evidence; its old publication blockers and counts do not describe current source.
+
 Phase 2 supersedes the preview results below. See [PHASE2.md](PHASE2.md) for clean-source workspace tests, evidence identifying Smart App Control, implemented controls, real process-kill/native-host checks, installer checks and publication blockers. All 32 substantive tests currently pass in a complete workspace invocation. The source is public at https://github.com/Sub2Nex/stratafetch. GitHub Actions is disabled by request; local validation is the release standard. Linux/macOS remain unverified. Stable release acceptance remains open.
 
 Environment: Windows x64, Rust 1.99.0 stable MSVC, 2026-10-11. This is an unsigned development preview, not an accepted stable release.
