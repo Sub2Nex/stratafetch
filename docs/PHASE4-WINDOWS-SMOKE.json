@@ -1,0 +1,22 @@
+{
+  "ping": {
+    "active": 0,
+    "download": null,
+    "ok": true
+  },
+  "added": {
+    "active": 1,
+    "download": {
+      "filename": "fixture.bin",
+      "id": "874f1c0a-40c0-4084-9da0-db71bb0c0a37",
+      "status": "Queued"
+    },
+    "ok": true
+  },
+  "pausedBytesAfterKill": 655360,
+  "completedBytes": 8388608,
+  "sha256": "bdf23837181f5808331800c1ae2b4f7d7a839536b10d58491471c50dde23833a",
+  "unavailableErrorReported": true,
+  "nativeDesktopExit": 0,
+  "screenshot": "C:\\Users\\under\\Downloads\\stratafetch\\docs\\screenshot-phase4-recovery.png"
+}

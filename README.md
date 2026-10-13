@@ -106,3 +106,6 @@ Tests use local servers and do not depend on public downloads. [Architecture](AR
 ## License
 
 Licensed under either [MIT](LICENSE-MIT) or [Apache License 2.0](LICENSE-APACHE), at your option. Contributions use the same dual license.
+## Phase 4 development verification
+
+Reliability changes after alpha.2 and actual local benchmark results are documented in [docs/PHASE4.md](docs/PHASE4.md). Alpha.2 remains the latest published release. Windows application-control restrictions and incomplete native/browser checks prevent an alpha.3 release at this time. All build and verification work remains local, with no GitHub Actions or billing configuration.
