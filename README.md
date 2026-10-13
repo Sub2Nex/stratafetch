@@ -4,7 +4,7 @@ A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
 **Experimental Windows alpha — stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
-Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Release gates and evidence](docs/PHASE2.md) describe the locally tested alpha and its remaining limits.
+Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Published Windows alpha](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.1). [Release gates and evidence](docs/PHASE2.md) describe the locally tested alpha and its remaining limits.
 
 ![Actual StrataFetch desktop after a verified crash-and-resume fixture transfer](docs/screenshot-phase2.png)
 
@@ -80,7 +80,7 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 Windows x64 is the locally verified primary build target. Linux x64 and macOS remain unverified. All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
 
-Local packages are generated in `dist/` using [packaging instructions](docs/INSTALLATION.md). No public binary download is advertised until release gates pass. Installer uninstallation preserves download state and completed files. Browser integration is a separate opt-in registration step.
+Download the unsigned [portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/stratafetch-windows-x64.zip), [experimental installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/stratafetch-windows-x64-setup.exe), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.1/SHA256SUMS). The portable CLI/desktop passed actual execution checks. Windows application control blocked the final installer on the build machine, so its final install/uninstall roundtrip is unverified; an earlier preview passed. Installer source preserves download data. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) reproduce the local build.
 
 History exports contain URLs, including any query tokens. Keep them private. Imports do not restore checkpoints or completed status and never start transfers automatically. Schedules need a running desktop/service and reopen paused after shutdown. Engine settings persist in SQLite; existing partial files keep their segment layouts.
 

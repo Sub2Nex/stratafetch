@@ -13,3 +13,5 @@ gh release create VERSION dist/stratafetch-windows-x64.zip dist/stratafetch-wind
 ```
 
 These are publication instructions; the Releases page is authoritative about published versions. Hosted checks are neither invoked nor claimed.
+
+Published Windows alpha: https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.1. Release source: d8cda2737db90c9776c82f6018b0987c27634040. Subsequent main-branch commits update documentation only. To reproduce/verify the published package against its exact source metadata, check out v0.1.0-alpha.1.
