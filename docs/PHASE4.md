@@ -1,6 +1,6 @@
 # Phase 4: Windows reliability work
 
-This is development work after `v0.1.0-alpha.2`, not a production-readiness declaration. No alpha.3 release or replacement alpha.2 assets were published. The native design, schema 2 history, download IDs, CLI and browser bridge remain in place. Builds, tests, lints, auditing and packaging were local. No workflow, hosted runner, billing configuration or paid service was added.
+This documents reliability work after `v0.1.0-alpha.2`, not a production-readiness declaration. The user subsequently explicitly requested publication of `v0.1.0-alpha.3`; it is distributed as an unsigned portable alpha with the remaining limitations below. Alpha.1/alpha.2 releases and assets are preserved. The native design, schema 2 history, download IDs, CLI and browser bridge remain in place. Builds, tests, lints, auditing and packaging were local. No workflow, hosted runner, billing configuration or paid service was added.
 
 ## Verified changes
 
@@ -64,7 +64,7 @@ Memory and UI work still scale with history length. The protocol bounds individu
 
 ## Distribution/signing restrictions and release decision
 
-Keep `v0.1.0-alpha.2` as the latest published release. Alpha.3 is withheld pending completion of native regression/OS/browser tests and installer upgrade/uninstall validation. Previous releases and assets remain untouched.
+The initial Phase 4 decision withheld alpha.3 because native regression/OS/browser tests and installer runtime validation were incomplete. Following the user's explicit request to publish a release, alpha.3 is published as a downloadable GitHub release, with its **alpha status** and those limitations disclosed. Only the verified portable ZIP and its checksums are release assets; the installer is withheld. No stable/production readiness claim is made. Previous releases and assets remain untouched.
 
 Free legitimate signing possibilities were investigated, without enrollment, accounts, certificates, uploads or purchases:
 
@@ -73,3 +73,9 @@ Free legitimate signing possibilities were investigated, without enrollment, acc
 - Self-signed certificates do not establish public Windows trust. Paid signing services/certificates were not purchased or enabled. Smart App Control requires a trusted provider's valid signature; unsigned binaries may be blocked. Do not disable protections, install a fabricated trust root, or mutate blocked binaries to evade policy. [Microsoft Smart App Control signing guidance](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/code-signing-for-smart-app-control).
 
 Completed-file verification can detect later user edits; arbitrary concurrent same-user filesystem tampering is not a security boundary. Publication validation adds a read of the recorded segment prefixes in addition to the final SHA-256 pass, trading disk I/O for detection of local damage. Hard-link publication remains required and will fail clearly on unsupported filesystems.
+
+## Alpha.3 release-version verification
+
+After the explicit request to publish, the workspace version was changed to 0.1.0-alpha.3 and rebuilt with the existing local toolchain. The full workspace suite then passed: **52 substantive Rust tests**, including all eight desktop UI regressions, plus empty wrapper/doc targets. Formatting, strict all-target Clippy and all eight extension-script tests passed. This supersedes the earlier blocked-test execution rows for the release-version test binaries; it does not complete the manual OS/browser checks or establish publisher trust. No Windows protection was changed or bypassed.
+
+The final release build explicitly selected both applications and examples: cargo build --release --workspace --bins --examples --locked --offline -j1. A version check caught stale CLI/browser-host binaries left by an earlier examples-only build; they were rebuilt before the final smoke test or packaging. Package verification now rejects a CLI version different from Cargo.toml. The final alpha.3 CLI reports 0.1.0-alpha.3. The actual CLI/native-host/service crash-resume test then passed with 524,288 recovered bytes and the correct 8 MiB checksum; desktop rendering exited successfully. See ALPHA3-WINDOWS-SMOKE.json and screenshot-alpha3-recovery.png. Isolated browser registration/unregister passed again. Historical smoke/benchmark results above retain their original provenance.

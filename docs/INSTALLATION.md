@@ -36,3 +36,9 @@ Final alpha installer execution was blocked by Windows application control on th
 ## Alpha.2 portable-only release
 
 The desktop redesign prerelease includes the portable ZIP and SHA256SUMS. No new installer roundtrip is claimed. The NSIS sections above describe the historical alpha.1 package and optional installer source. For alpha.2, build from the committed source, run ./packaging/portable.ps1, then ./packaging/verify-package.ps1 -PortableOnly. Close older desktop/service instances before running the new version. Do not mix old engine processes with the new desktop's additive paused-add commands.
+
+## v0.1.0-alpha.3 portable release
+
+Download the ZIP and SHA256SUMS from https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.3. Close the existing desktop and service, back up user state, and replace all three executables together. New IPC clients require the matching service. Re-register the native host if its permanent executable path changes. Default download history lives outside the installation folder; schema 2 and existing IDs/checkpoints are preserved.
+
+This release distributes no installer. The compiled installer still lacks runtime upgrade/uninstall acceptance. Unsigned executables can be rejected by Windows application control; do not change security settings to force them to run.

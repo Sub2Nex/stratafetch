@@ -11,8 +11,8 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 VIProductVersion "0.1.0.0"
 VIAddVersionKey "ProductName" "StrataFetch"
-VIAddVersionKey "ProductVersion" "0.1.0-alpha.2"
-VIAddVersionKey "FileVersion" "0.1.0-alpha.2"
+VIAddVersionKey "ProductVersion" "0.1.0-alpha.3"
+VIAddVersionKey "FileVersion" "0.1.0-alpha.3"
 VIAddVersionKey "FileDescription" "StrataFetch unsigned Windows alpha installer"
 VIAddVersionKey "LegalCopyright" "StrataFetch contributors"
 !define MUI_ICON "..\assets\stratafetch.ico"
@@ -48,7 +48,7 @@ Section "StrataFetch desktop and command line" Core
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayName" "StrataFetch (development preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayVersion" "0.1.0-alpha.2"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayVersion" "0.1.0-alpha.3"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "URLInfoAbout" "https://github.com/Sub2Nex/stratafetch"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "NoRepair" 1

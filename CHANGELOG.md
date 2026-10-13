@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased after 0.1.0-alpha.2
+## 0.1.0-alpha.3 — 2026-10-13
 
 - Replace per-job queue polling with one notification-driven dispatcher.
 - Stream immutable bounded IPC pages for read and mutation replies.
@@ -8,7 +8,7 @@
 - Prevent stale desktop snapshots and scheduler actions after configuration errors.
 - Add visible browser handoff feedback, distinct Edge registration and ownership-safe unregister tests.
 - Add actual local Windows queue/IPC/memory benchmarks and document incomplete OS/browser verification in `docs/PHASE4.md`.
-- Rebuild portable staging cleanly and report installer copy/removal failures. No alpha.3 release yet.
+- Rebuild portable staging cleanly and report installer copy/removal failures. Portable alpha release; installer runtime acceptance remains incomplete.
 
 ## 0.1.0-alpha.2 — 2026-10-13
 

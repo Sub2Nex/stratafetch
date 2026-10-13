@@ -108,4 +108,4 @@ Tests use local servers and do not depend on public downloads. [Architecture](AR
 Licensed under either [MIT](LICENSE-MIT) or [Apache License 2.0](LICENSE-APACHE), at your option. Contributions use the same dual license.
 ## Phase 4 development verification
 
-Reliability changes after alpha.2 and actual local benchmark results are documented in [docs/PHASE4.md](docs/PHASE4.md). Alpha.2 remains the latest published release. Windows application-control restrictions and incomplete native/browser checks prevent an alpha.3 release at this time. All build and verification work remains local, with no GitHub Actions or billing configuration.
+Reliability changes after alpha.2 and actual local benchmark results are documented in [docs/PHASE4.md](docs/PHASE4.md). [Download v0.1.0-alpha.3](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.3). This unsigned portable alpha includes the reliability fixes; incomplete native/browser checks and Windows application-control restrictions remain documented. All build and verification work remains local, with no GitHub Actions or billing configuration.
