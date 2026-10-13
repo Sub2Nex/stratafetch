@@ -30,3 +30,5 @@ The isolated installer smoke test installed into a workspace folder, compared th
 On machines with little free memory, pass -j 1 to Cargo commands. Final local parallel compilation encountered Windows error 1455 (paging-memory exhaustion); a single build job avoided that resource failure.
 
 Run ./packaging/verify-package.ps1 to compare archive/build hashes and source metadata, then ./packaging/test-installer.ps1 for an isolated install/uninstall roundtrip. These scripts run locally. The installer test stops if an existing user installation or Start Menu folder would be affected.
+
+Final alpha installer execution was blocked by Windows application control on the build machine. It is compiled and hash-verified, but its final installation roundtrip is unverified. The earlier preview roundtrip passed. The portable release binaries passed native/CLI execution checks. Do not disable protection to run the installer.

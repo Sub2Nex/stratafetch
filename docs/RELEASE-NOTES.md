@@ -9,7 +9,7 @@ An experimental, unsigned Windows x64 release of the existing native Rust downlo
 - Safe JSON download-recipe export/import; imports create paused jobs with fresh IDs.
 - Improved native typography, scrolling details, search and original window/installer branding.
 - Native host connection/download reporting, exact-origin checks and per-user registration cleanup.
-- Portable ZIP and per-user NSIS installer, plus SHA256SUMS. Installer uninstallation preserves download state and completed files.
+- Portable ZIP and per-user NSIS installer, plus SHA256SUMS. Installer source is designed to preserve download state and completed files. Earlier preview installation/uninstallation passed; execution of this final unsigned installer was blocked by Windows application control here, so its final roundtrip is not verified. The portable binaries passed actual execution checks.
 
 ## Local evidence
 
