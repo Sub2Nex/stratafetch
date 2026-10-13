@@ -37,7 +37,13 @@ Section "StrataFetch desktop and command line" Core
   SectionIn RO
   SetShellVarContext current
   SetOutPath "$INSTDIR"
+  ClearErrors
   File /r "${PACKAGE_DIR}\*.*"
+  ${If} ${Errors}
+    MessageBox MB_OK "Installation could not copy all files. Close StrataFetch and its background service, then run the installer again. Download history is preserved." /SD IDOK
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayName" "StrataFetch (development preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
@@ -61,9 +67,15 @@ Section "Uninstall"
     MessageBox MB_OK "Browser registration could not be removed automatically. See docs/BROWSER.md. Another installation's registration is preserved." /SD IDOK
   ${EndIf}
   ; Only remove the product files we installed. Preserve other files and all user state.
+  ClearErrors
   Delete "$INSTDIR\stratafetch.exe"
   Delete "$INSTDIR\stratafetch-desktop.exe"
   Delete "$INSTDIR\stratafetch-browser-host.exe"
+  ${If} ${Errors}
+    MessageBox MB_OK "Some StrataFetch executable files are still in use. Close the desktop and service, then run this uninstaller again. Download history and the Windows uninstall entry are preserved." /SD IDOK
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
   Delete "$INSTDIR\BUILD.txt"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE-MIT"

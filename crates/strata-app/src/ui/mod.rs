@@ -630,8 +630,15 @@ impl eframe::App for App {
 
         settings::columns(&ctx, &mut self.state);
 
-        for command in scheduler::show(&ctx, &mut self.state, &self.jobs) {
-            self.command(command);
+        let scheduled = scheduler::show(&ctx, &mut self.state, &self.jobs);
+        if !scheduled.is_empty()
+            && self
+                .worker
+                .commands
+                .try_send(worker::Request::Sequence(scheduled))
+                .is_err()
+        {
+            self.state.message = Some("The engine is busy. Try saving the schedule again.".into());
         }
 
         if self.state.statistics_open {

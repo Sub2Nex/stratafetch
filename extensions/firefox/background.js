@@ -5,6 +5,11 @@ browser.contextMenus.onClicked.addListener(async info => {
   if (info.menuItemId !== "stratafetch") return;
   try {
     const response = await browser.runtime.sendNativeMessage("org.stratafetch.host", { action: "add", url: info.linkUrl });
-    if (!response.ok) console.error(response.error);
-  } catch (error) { console.error("Start StrataFetch and install the native host.", error); }
+    await showResult(response.ok, response.ok ? "Download added to StrataFetch" : response.error);
+  } catch { await showResult(false, "StrataFetch is unavailable. Start the app and register the native host."); }
 });
+async function showResult(ok, message) {
+  await browser.action.setBadgeText({ text: ok ? "+" : "!" });
+  await browser.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" });
+  await browser.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` });
+}

@@ -2,9 +2,19 @@ $ErrorActionPreference = 'Stop'
 $workspacePath = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $workspacePath 'dist'
 $packagePath = Join-Path $outputPath 'stratafetch-windows-x64'
+# This path is generated staging only. Fresh contents prevent removed scripts,
+# old extensions, or earlier package files leaking into an upgrade archive.
+$resolvedPackagePath = [IO.Path]::GetFullPath($packagePath)
+$expectedPackagePath = [IO.Path]::GetFullPath((Join-Path $workspacePath 'dist\stratafetch-windows-x64'))
+if ($resolvedPackagePath -ne $expectedPackagePath -or -not $resolvedPackagePath.StartsWith([IO.Path]::GetFullPath($workspacePath) + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Package staging path escaped workspace' }
+if (Test-Path -LiteralPath $resolvedPackagePath) { Remove-Item -LiteralPath $resolvedPackagePath -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 $sourceCommit = git -C $workspacePath rev-parse HEAD
-@("StrataFetch 0.1.0-alpha.2 — unsigned development preview","Source commit: $sourceCommit","Target: x86_64-pc-windows-msvc","Unsigned binaries. Native launch, rendering and selected interactions verified; see documented manual limits.","See docs/PHASE3.md for evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
+$manifestText = Get-Content -LiteralPath (Join-Path $workspacePath 'Cargo.toml') -Raw
+if ($manifestText -notmatch '(?m)^version = "([^"]+)"$') { throw 'Cannot determine workspace version' }
+$packageVersion = $Matches[1]
+$dirtySource = [bool](git -C $workspacePath status --porcelain --untracked-files=normal)
+@("StrataFetch $packageVersion - unsigned development preview","Source commit: $sourceCommit","Working tree modified: $dirtySource","Target: x86_64-pc-windows-msvc","Unsigned binaries; Windows may block execution. Do not bypass application-control policies.","See docs/PHASE4.md for current evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
 foreach ($binaryName in @('stratafetch.exe','stratafetch-desktop.exe','stratafetch-browser-host.exe')) {
     $binaryPath = Join-Path $workspacePath "target\release\$binaryName"
     if (-not (Test-Path -LiteralPath $binaryPath)) {throw "Build release binary first: $binaryName"}

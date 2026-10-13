@@ -2,7 +2,11 @@ use eframe::egui;
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     time::Duration,
 };
 
@@ -12,6 +16,7 @@ use strata_core::{Manager, Options, Settings, metadata::Metadata};
 
 pub enum Request {
     Command(Command),
+    Sequence(Vec<Command>),
 
     Probe(String),
 
@@ -168,22 +173,37 @@ impl Worker {
 
                     let dir = directory.clone();
 
-                    tokio::spawn(async move {
+                    let generation = Arc::new(AtomicU64::new(0));
+                    let polling_generation = generation.clone();
+
+                    let task = tokio::spawn(async move {
                         let mut tick = tokio::time::interval(Duration::from_millis(250));
 
                         loop {
                             tick.tick().await;
 
+                            let before = polling_generation.load(Ordering::SeqCst);
+                            if !before.is_multiple_of(2) {
+                                continue;
+                            }
+
                             let reply = call(manager.as_ref(), &dir, Command::List).await;
 
-                            *latest.lock().unwrap() = Some(reply);
+                            let mut latest = latest.lock().unwrap();
+                            if polling_generation.load(Ordering::SeqCst) == before {
+                                *latest = Some(reply);
+                            }
 
                             ctx.request_repaint();
                         }
-                    })
+                    });
+                    (task, generation)
                 };
 
                 while let Some(request) = requests.recv().await {
+                    if !matches!(request, Request::Probe(_)) {
+                        snapshots.1.fetch_add(1, Ordering::SeqCst);
+                    }
                     let reply = match request {
                         Request::Probe(url) => {
                             let events = events.clone();
@@ -217,6 +237,16 @@ impl Worker {
                                 );
                             }
 
+                            reply
+                        }
+                        Request::Sequence(commands) => {
+                            let mut reply = call(manager.as_ref(), &directory, Command::List).await;
+                            for command in commands {
+                                if reply.error.is_some() {
+                                    break;
+                                }
+                                reply = call(manager.as_ref(), &directory, command).await;
+                            }
                             reply
                         }
 
@@ -277,11 +307,12 @@ impl Worker {
                     }
 
                     *latest.lock().unwrap() = Some(reply);
+                    snapshots.1.fetch_add(1, Ordering::SeqCst);
 
                     ctx.request_repaint();
                 }
 
-                snapshots.abort();
+                snapshots.0.abort();
 
                 if let Some(manager) = &manager {
                     shutdown(manager).await;

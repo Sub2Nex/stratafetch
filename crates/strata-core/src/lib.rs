@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::watch;
@@ -107,6 +110,8 @@ pub(crate) struct Inner {
     pub controls: Mutex<HashMap<String, watch::Sender<bool>>>,
     pub settings: Mutex<Settings>,
     pub bandwidth: tokio::sync::Mutex<()>,
+    pub dispatcher_running: AtomicBool,
+    pub queue_changed: tokio::sync::Notify,
     pub options: Options,
     pub client: reqwest::Client,
     pub meter: Mutex<HashMap<String, (std::time::Instant, u64)>>,
@@ -171,6 +176,8 @@ impl Manager {
             controls: Mutex::new(HashMap::new()),
             settings: Mutex::new(settings),
             bandwidth: tokio::sync::Mutex::new(()),
+            dispatcher_running: AtomicBool::new(false),
+            queue_changed: tokio::sync::Notify::new(),
             client: builder.build()?,
             options,
             meter: Mutex::new(HashMap::new()),
@@ -198,6 +205,7 @@ impl Manager {
         let mut current = self.0.settings.lock().unwrap();
         self.0.store.lock().unwrap().save_settings(&settings)?;
         *current = settings;
+        self.0.queue_changed.notify_one();
         Ok(())
     }
     pub fn get(&self, id: &str) -> Result<Job> {
@@ -244,15 +252,15 @@ impl Manager {
             );
             directory = organized;
         }
-        let jobs = self.list();
+        let jobs = self.0.jobs.lock().unwrap();
         let mut destination = directory.join(&filename);
         for index in 1..10000 {
-            if !destination.exists() && !jobs.iter().any(|j| j.destination == destination) {
+            if !destination.exists() && !jobs.values().any(|j| j.destination == destination) {
                 break;
             }
             destination = directory.join(format!("{index}-{filename}"));
         }
-        if destination.exists() || jobs.iter().any(|j| j.destination == destination) {
+        if destination.exists() || jobs.values().any(|j| j.destination == destination) {
             bail!("Too many filename collisions");
         }
         let job = Job {
@@ -270,7 +278,7 @@ impl Manager {
             sha256: None,
             created: now(),
             sequence: jobs
-                .iter()
+                .values()
                 .map(|job| job.sequence)
                 .max()
                 .unwrap_or(0)
@@ -282,6 +290,7 @@ impl Manager {
             category,
             scheduled_at: None,
         };
+        drop(jobs);
         self.update(job.clone())?;
         Ok(job)
     }
@@ -298,32 +307,86 @@ impl Manager {
         job.status = Status::Queued;
         job.error = None;
         self.update(job)?;
-        let (tx, rx) = watch::channel(false);
+        let (tx, _) = watch::channel(false);
         controls.insert(id.to_owned(), tx);
-        drop(controls);
-        let manager = self.clone();
-        let id = id.to_owned();
-        tokio::spawn(async move {
-            let outcome = network::run(&manager, &id, rx).await;
-            let mut controls = manager.0.controls.lock().unwrap();
-            if let Ok(mut job) = manager.get(&id) {
-                job.speed = 0.0;
-                job.connections = 0;
-                if let Err(error) = outcome
-                    && job.status != Status::Paused
-                    && job.status != Status::Cancelled
-                {
-                    job.status = Status::Failed;
-                    job.error = Some(format!("{error:#}"));
+        // Serialize dispatcher lifetime with queue mutations to avoid lost admissions.
+        if !self.0.dispatcher_running.swap(true, Ordering::SeqCst) {
+            let manager = self.clone();
+            tokio::spawn(async move { manager.dispatch().await });
+        }
+        self.0.queue_changed.notify_one();
+        Ok(())
+    }
+    async fn dispatch(self) {
+        loop {
+            {
+                let mut controls = self.0.controls.lock().unwrap();
+                if controls.is_empty() {
+                    self.0.dispatcher_running.store(false, Ordering::SeqCst);
+                    return;
                 }
-                if let Err(error) = manager.update(job) {
-                    eprintln!("Cannot persist final state: {error}");
+                let limit = self.settings().concurrent_jobs;
+                loop {
+                    let candidate = {
+                        let jobs = self.0.jobs.lock().unwrap();
+                        let active = jobs
+                            .values()
+                            .filter(|j| j.status == Status::Downloading)
+                            .count();
+                        if active >= limit {
+                            None
+                        } else {
+                            jobs.values()
+                                .filter(|j| {
+                                    j.status == Status::Queued
+                                        && controls.contains_key(&j.id)
+                                        && j.scheduled_at.is_none_or(|time| time <= now())
+                                })
+                                .min_by_key(|j| {
+                                    (std::cmp::Reverse(j.priority), j.sequence, j.created)
+                                })
+                                .cloned()
+                        }
+                    };
+                    let Some(mut job) = candidate else { break };
+                    job.status = Status::Downloading;
+                    let id = job.id.clone();
+                    if let Err(error) = self.update(job) {
+                        eprintln!("Cannot admit queued download: {error:#}");
+                        controls.remove(&id);
+                        continue;
+                    }
+                    let rx = controls.get(&id).unwrap().subscribe();
+                    let manager = self.clone();
+                    tokio::spawn(async move {
+                        let outcome = network::run(&manager, &id, rx).await;
+                        let mut controls = manager.0.controls.lock().unwrap();
+                        if let Ok(mut job) = manager.get(&id) {
+                            job.speed = 0.0;
+                            job.connections = 0;
+                            if let Err(error) = outcome
+                                && job.status != Status::Paused
+                                && job.status != Status::Cancelled
+                            {
+                                job.status = Status::Failed;
+                                job.error = Some(format!("{error:#}"));
+                            }
+                            if let Err(error) = manager.update(job) {
+                                eprintln!("Cannot persist final state: {error}");
+                            }
+                        }
+                        controls.remove(&id);
+                        manager.0.meter.lock().unwrap().remove(&id);
+                        manager.0.queue_changed.notify_one();
+                    });
                 }
             }
-            controls.remove(&id);
-            manager.0.meter.lock().unwrap().remove(&id);
-        });
-        Ok(())
+            // Scheduled jobs share one timer; completions and user actions wake immediately.
+            tokio::select! {
+                _ = self.0.queue_changed.notified() => (),
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => (),
+            }
+        }
     }
     pub fn pause(&self, id: &str) -> Result<()> {
         self.stop(id, Status::Paused)
@@ -332,17 +395,22 @@ impl Manager {
         self.stop(id, Status::Cancelled)
     }
     fn stop(&self, id: &str, status: Status) -> Result<()> {
-        let controls = self.0.controls.lock().unwrap();
+        let mut controls = self.0.controls.lock().unwrap();
         let mut job = self.get(id)?;
         if job.status == Status::Completed {
             bail!("Completed downloads cannot be stopped");
         }
+        let queued = job.status == Status::Queued;
         job.status = status;
         job.speed = 0.0;
         self.update(job)?;
         if let Some(control) = controls.get(id) {
             let _ = control.send(true);
         }
+        if queued {
+            controls.remove(id);
+        }
+        self.0.queue_changed.notify_one();
         Ok(())
     }
     pub fn restart(&self, id: &str) -> Result<()> {
@@ -383,6 +451,7 @@ impl Manager {
     }
     pub fn is_running(&self) -> bool {
         !self.0.controls.lock().unwrap().is_empty()
+            || self.0.dispatcher_running.load(Ordering::SeqCst)
     }
     /// Re-reads a completed file and compares SHA-256 to a provided or recorded digest.
     pub fn verify(&self, id: &str, expected: Option<&str>) -> Result<()> {

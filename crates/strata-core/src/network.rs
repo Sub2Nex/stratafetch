@@ -109,40 +109,39 @@ async fn cancelled(rx: &mut watch::Receiver<bool>) {
     let _ = rx.changed().await;
 }
 
+fn safe_staging_metadata(metadata: &std::fs::Metadata) -> Result<()> {
+    ensure!(
+        metadata.is_file() && !metadata.file_type().is_symlink(),
+        "Unsafe staging file"
+    );
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        ensure!(
+            metadata.file_attributes() & 0x400 == 0,
+            "Staging reparse points are not supported"
+        );
+    }
+    Ok(())
+}
+
+fn check_destination_parent(job: &Job) -> Result<()> {
+    let parent = job
+        .destination
+        .parent()
+        .context("Missing destination directory")?;
+    ensure!(
+        parent.canonicalize()? == parent,
+        "Destination directory was redirected; restart in a safe folder"
+    );
+    Ok(())
+}
+
 pub(crate) async fn run(
     manager: &Manager,
     id: &str,
     mut cancel: watch::Receiver<bool>,
 ) -> Result<()> {
-    loop {
-        if *cancel.borrow() {
-            return Ok(());
-        }
-        {
-            let _controls = manager.0.controls.lock().unwrap();
-            let jobs = manager.list();
-            if !*cancel.borrow()
-                && jobs
-                    .iter()
-                    .filter(|j| j.status == Status::Downloading)
-                    .count()
-                    < manager.settings().concurrent_jobs
-                && jobs
-                    .iter()
-                    .find(|j| {
-                        j.status == Status::Queued
-                            && j.scheduled_at.is_none_or(|time| time <= now())
-                    })
-                    .is_some_and(|j| j.id == id)
-            {
-                let mut job = manager.get(id)?;
-                job.status = Status::Downloading;
-                manager.update(job)?;
-                break;
-            }
-        }
-        tokio::select! {_=tokio::time::sleep(Duration::from_millis(25))=>(),_=cancelled(&mut cancel)=>return Ok(())};
-    }
     let mut job = manager.get(id)?;
     if *cancel.borrow() {
         return Ok(());
@@ -162,11 +161,9 @@ pub(crate) async fn run(
         .unwrap()
         .insert(id.to_owned(), (Instant::now(), job.downloaded));
     let stage = staging_path(&job);
+    check_destination_parent(&job)?;
     if let Ok(meta) = tokio::fs::symlink_metadata(&stage).await {
-        ensure!(
-            meta.is_file() && !meta.file_type().is_symlink(),
-            "Unsafe staging file"
-        );
+        safe_staging_metadata(&meta)?;
     }
     // Probe the actual GET path; HEAD and Accept-Ranges alone are not reliable.
     let probe = tokio::select! {
@@ -328,6 +325,22 @@ pub(crate) async fn run(
         finished.size.is_none_or(|size| size == finished.downloaded),
         "Downloaded size mismatch"
     );
+    check_destination_parent(&finished)?;
+    let metadata = tokio::fs::symlink_metadata(&stage).await?;
+    safe_staging_metadata(&metadata)?;
+    ensure!(
+        metadata.len() == finished.downloaded,
+        "Staging file size changed before completion"
+    );
+    // Compare with hashes accumulated from HTTP bytes, not a fresh checksum alone.
+    // A fresh checksum would otherwise bless local damage as the completed file.
+    for segment in &finished.segments {
+        let digest = hash_prefix(&stage, segment.start, segment.done).await?;
+        ensure!(
+            Some(format!("{:x}", digest.finalize())) == segment.sha256,
+            "Staging data checksum changed before completion"
+        );
+    }
     let mut file = tokio::fs::File::open(&stage).await?;
     let mut hash = Sha256::new();
     let mut buffer = vec![0u8; 64 * 1024];
@@ -481,9 +494,7 @@ async fn transfer(
                         return Ok(());
                     }
                 }
-                file.write_all(part).await?;
-                digest.update(part);
-                pending += part.len() as u64;
+                write_chunk(&mut file, part, &mut digest, &mut pending).await?;
             }
             if job.bytes_per_second > 0 {
                 let per_connection = job.bytes_per_second as f64 / job.connections.max(1) as f64;
@@ -582,4 +593,82 @@ async fn hash_prefix(path: &std::path::Path, start: u64, length: u64) -> Result<
         left -= n as u64;
     }
     Ok(digest)
+}
+
+// Only fully written bytes may enter a later durable checkpoint. A partial OS
+// write followed by disk-full/interruption leaves the old checkpoint authoritative.
+async fn write_chunk(
+    writer: &mut (impl tokio::io::AsyncWrite + Unpin),
+    bytes: &[u8],
+    digest: &mut Sha256,
+    pending: &mut u64,
+) -> std::io::Result<()> {
+    writer.write_all(bytes).await?;
+    digest.update(bytes);
+    *pending += bytes.len() as u64;
+    Ok(())
+}
+
+#[cfg(test)]
+mod write_fault_tests {
+    use super::*;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
+    struct FailingDisk {
+        remaining: usize,
+        bytes: Vec<u8>,
+        error: i32,
+    }
+    impl tokio::io::AsyncWrite for FailingDisk {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            bytes: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            if self.remaining == 0 {
+                return Poll::Ready(Err(std::io::Error::from_raw_os_error(self.error)));
+            }
+            let n = bytes.len().min(self.remaining);
+            self.bytes.extend_from_slice(&bytes[..n]);
+            self.remaining -= n;
+            Poll::Ready(Ok(n))
+        }
+        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+        fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+    #[tokio::test]
+    async fn partial_disk_full_and_interrupted_writes_do_not_advance_checkpoints() {
+        // Windows ERROR_DISK_FULL / ERROR_OPERATION_ABORTED; Unix ENOSPC / EIO.
+        #[cfg(windows)]
+        let errors = [112, 995];
+        #[cfg(not(windows))]
+        let errors = [28, 5];
+        for error in errors {
+            let mut disk = FailingDisk {
+                remaining: 3,
+                bytes: vec![],
+                error,
+            };
+            let mut digest = Sha256::new();
+            digest.update(b"durable prefix");
+            let expected = digest.clone().finalize();
+            let mut pending = 14;
+            assert_eq!(
+                write_chunk(&mut disk, b"abcdef", &mut digest, &mut pending)
+                    .await
+                    .unwrap_err()
+                    .raw_os_error(),
+                Some(error)
+            );
+            assert_eq!(disk.bytes, b"abc");
+            assert_eq!(pending, 14);
+            assert_eq!(digest.finalize(), expected);
+        }
+    }
 }

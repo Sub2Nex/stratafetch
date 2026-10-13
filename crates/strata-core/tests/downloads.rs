@@ -871,3 +871,145 @@ async fn extreme_untrusted_range_total_fails_without_panicking() {
     assert!(!manager.is_running());
     task.abort();
 }
+
+#[tokio::test]
+async fn missing_and_truncated_checkpoints_never_publish_and_restart_repairs() {
+    for missing in [true, false] {
+        let (url, data, server) = server(0, 600_000).await;
+        let dir = TempDir::new().unwrap();
+        let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+        let job = manager.add(&url, dir.path(), None).unwrap();
+        manager.configure(&job.id, 0, 100_000).unwrap();
+        manager.start(&job.id).unwrap();
+        pause_after_progress(&manager, &job.id).await;
+        let stage = dir.path().join(format!(".strata-{}.part", job.id));
+        if missing {
+            std::fs::remove_file(&stage).unwrap();
+        } else {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&stage)
+                .unwrap()
+                .set_len(1)
+                .unwrap();
+        }
+        manager.start(&job.id).unwrap();
+        let failed = wait(&manager, &job.id).await;
+        assert_eq!(failed.status, Status::Failed, "{:?}", failed.error);
+        assert!(!job.destination.exists());
+        manager.configure(&job.id, 0, 0).unwrap();
+        manager.restart(&job.id).unwrap();
+        let completed = wait(&manager, &job.id).await;
+        assert_eq!(completed.status, Status::Completed, "{:?}", completed.error);
+        assert_eq!(std::fs::read(&completed.destination).unwrap(), *data.data);
+        manager.verify(&job.id, None).unwrap();
+        server.abort();
+    }
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_readonly_staging_fails_without_modifying_existing_bytes() {
+    let (url, _, server) = server(0, 600_000).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let job = manager.add(&url, dir.path(), None).unwrap();
+    let stage = dir.path().join(format!(".strata-{}.part", job.id));
+    std::fs::write(&stage, b"protected").unwrap();
+    let mut permissions = std::fs::metadata(&stage).unwrap().permissions();
+    let original_permissions = permissions.clone();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&stage, permissions).unwrap();
+    manager.start(&job.id).unwrap();
+    let failed = wait(&manager, &job.id).await;
+    assert_eq!(failed.status, Status::Failed);
+    assert!(!job.destination.exists());
+    assert_eq!(std::fs::read(&stage).unwrap(), b"protected");
+    std::fs::set_permissions(&stage, original_permissions).unwrap();
+    server.abort();
+}
+
+#[tokio::test]
+async fn scheduled_queue_stops_immediately_and_dispatcher_can_restart() {
+    let (url, data, server) = server(0, 1024).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let job = manager.add(&url, dir.path(), None).unwrap();
+    manager
+        .schedule(&job.id, "fixture", Some(u64::MAX))
+        .unwrap();
+    manager.start(&job.id).unwrap();
+    manager.pause(&job.id).unwrap();
+    manager.schedule(&job.id, "fixture", None).unwrap();
+    manager.start(&job.id).unwrap();
+    let completed = wait(&manager, &job.id).await;
+    assert_eq!(completed.status, Status::Completed, "{:?}", completed.error);
+    assert_eq!(std::fs::read(completed.destination).unwrap(), *data.data);
+    server.abort();
+}
+
+#[tokio::test]
+async fn damage_during_active_transfer_is_not_blessed_by_final_checksum() {
+    use std::io::{Seek, Write};
+    let (url, _, server) = server(0, 600_000).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let job = manager.add(&url, dir.path(), None).unwrap();
+    manager.configure(&job.id, 0, 200_000).unwrap();
+    manager.start(&job.id).unwrap();
+    let progress = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let current = manager.get(&job.id).unwrap();
+            if current.downloaded > 0 {
+                break current;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let prefix = progress.segments.iter().find(|s| s.done > 0).unwrap();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(dir.path().join(format!(".strata-{}.part", job.id)))
+        .unwrap();
+    file.seek(std::io::SeekFrom::Start(prefix.start)).unwrap();
+    file.write_all(b"damaged").unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+    let failed = wait(&manager, &job.id).await;
+    assert_eq!(failed.status, Status::Failed, "{:?}", failed.error);
+    assert!(failed.error.unwrap().contains("checksum"));
+    assert!(!job.destination.exists());
+    server.abort();
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn replaced_destination_with_ntfs_junction_is_rejected() {
+    let (url, _, server) = server(0, 1024).await;
+    let dir = TempDir::new().unwrap();
+    let manager = Manager::open(&dir.path().join("state"), Options::default()).unwrap();
+    let output = dir.path().join("output");
+    let redirected = dir.path().join("redirected");
+    let job = manager.add(&url, &output, None).unwrap();
+    std::fs::remove_dir(&output).unwrap();
+    std::fs::create_dir(&redirected).unwrap();
+    let quote = |p: &std::path::Path| format!("'{}'", p.to_string_lossy().replace('\'', "''"));
+    let result = std::process::Command::new("powershell.exe").args([
+        "-NoProfile", "-NonInteractive", "-Command",
+        &format!("$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path {} -Target {} | Out-Null", quote(&output), quote(&redirected)),
+    ]).output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    manager.start(&job.id).unwrap();
+    let failed = wait(&manager, &job.id).await;
+    assert_eq!(failed.status, Status::Failed);
+    assert!(failed.error.unwrap().contains("redirected"));
+    assert_eq!(std::fs::read_dir(&redirected).unwrap().count(), 0);
+    std::fs::remove_dir(&output).unwrap(); // Remove only the junction, not its target.
+    server.abort();
+}

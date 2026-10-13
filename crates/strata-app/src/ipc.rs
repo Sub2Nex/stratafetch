@@ -65,6 +65,84 @@ struct Request {
     version: u32,
     command: Command,
 }
+// Pages belong to one immutable command result on one connection. Concurrent
+// transfers cannot shift offsets and cause duplicates or missing records.
+#[derive(Serialize, Deserialize)]
+struct Page {
+    version: u32,
+    index: usize,
+    done: bool,
+    reply: Reply,
+}
+async fn write_pages(stream: &mut (impl AsyncWrite + Unpin), mut reply: Reply) -> Result<()> {
+    let jobs = std::mem::take(&mut reply.jobs);
+    let mut pending = jobs.into_iter().peekable();
+    let mut index = 0;
+    loop {
+        let mut page_reply = reply.clone();
+        let mut bytes = serde_json::to_vec(&page_reply)?.len() + 128;
+        while let Some(job) = pending.peek() {
+            let size = serde_json::to_vec(job)?.len() + 1;
+            ensure!(
+                size < MAX / 2,
+                "Single download record exceeds IPC page limit"
+            );
+            if !page_reply.jobs.is_empty()
+                && (bytes + size > MAX / 2 || page_reply.jobs.len() == 128)
+            {
+                break;
+            }
+            bytes += size;
+            page_reply.jobs.push(pending.next().unwrap());
+        }
+        let done = pending.peek().is_none();
+        write_frame(
+            stream,
+            &Page {
+                version: 2,
+                index,
+                done,
+                reply: page_reply,
+            },
+        )
+        .await?;
+        if done {
+            return Ok(());
+        }
+        index += 1;
+    }
+}
+async fn read_pages(stream: &mut (impl AsyncRead + Unpin)) -> Result<Reply> {
+    let mut result: Option<Reply> = None;
+    let mut index = 0;
+    loop {
+        let page: Page = read_frame(stream).await?;
+        ensure!(
+            page.version == 2 && page.index == index,
+            "Invalid IPC page sequence"
+        );
+        ensure!(
+            page.done || !page.reply.jobs.is_empty(),
+            "Empty intermediate IPC page"
+        );
+        if let Some(reply) = &mut result {
+            ensure!(
+                reply.version == page.reply.version
+                    && reply.error == page.reply.error
+                    && reply.accepted_id == page.reply.accepted_id
+                    && reply.settings == page.reply.settings,
+                "Inconsistent IPC snapshot metadata"
+            );
+            reply.jobs.extend(page.reply.jobs);
+        } else {
+            result = Some(page.reply);
+        }
+        if page.done {
+            return Ok(result.unwrap());
+        }
+        index += 1;
+    }
+}
 fn endpoint(directory: &Path) -> String {
     let canonical = directory
         .canonicalize()
@@ -112,12 +190,12 @@ async fn exchange(
     write_frame(
         &mut stream,
         &Request {
-            version: 1,
+            version: 2,
             command,
         },
     )
     .await?;
-    read_frame(&mut stream).await
+    read_pages(&mut stream).await
 }
 pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
     #[cfg(windows)]
@@ -143,13 +221,20 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
 async fn handle(mut stream: impl AsyncRead + AsyncWrite + Unpin, manager: Manager) -> Result<()> {
     let request: Request =
         tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut stream)).await??;
-    ensure!(request.version == 1, "Unsupported IPC version");
+    ensure!(matches!(request.version, 1 | 2), "Unsupported IPC version");
+    let version = request.version;
     let reply = tokio::task::spawn_blocking(move || execute(&manager, request.command)).await?;
-    tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        write_frame(&mut stream, &reply),
-    )
-    .await?
+    tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        if version == 2 { write_pages(&mut stream, reply).await } else {
+            // Retain small legacy replies, with an actionable error for old clients.
+            let mut reply = reply;
+            if serde_json::to_vec(&reply)?.len() > MAX {
+                reply.jobs.clear();
+                reply.error = Some("History exceeds legacy IPC limit; upgrade all StrataFetch executables together".into());
+            }
+            write_frame(&mut stream, &reply).await
+        }
+    }).await?
 }
 pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
     let capacity = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
@@ -218,5 +303,53 @@ mod tests {
         .await
         .unwrap();
         assert!(handle(server, manager).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn truncated_and_reordered_snapshots_are_not_returned() {
+        for index in [0, 1] {
+            let (mut sender, mut receiver) = tokio::io::duplex(4096);
+            let reply = Reply {
+                version: 1,
+                jobs: vec![],
+                error: None,
+                accepted_id: None,
+                settings: Default::default(),
+            };
+            write_frame(
+                &mut sender,
+                &Page {
+                    version: 2,
+                    index,
+                    done: false,
+                    reply,
+                },
+            )
+            .await
+            .unwrap();
+            drop(sender);
+            assert!(read_pages(&mut receiver).await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_clients_still_receive_small_replies() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = Manager::open(dir.path(), Default::default()).unwrap();
+        let (mut client, server) = tokio::io::duplex(4096);
+        let handler = tokio::spawn(handle(server, manager));
+        write_frame(
+            &mut client,
+            &Request {
+                version: 1,
+                command: Command::List,
+            },
+        )
+        .await
+        .unwrap();
+        let reply: Reply = read_frame(&mut client).await.unwrap();
+        assert!(reply.error.is_none());
+        assert!(reply.jobs.is_empty());
+        handler.await.unwrap().unwrap();
     }
 }
