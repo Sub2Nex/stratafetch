@@ -1,0 +1,9 @@
+{
+  "elapsedSeconds": 81.800822,
+  "sampledPeakWorkingSetBytes": 19693568,
+  "freePhysicalMemoryAtStartBytes": 1473359872,
+  "exitCode": 0,
+  "bytes": 4294967296,
+  "independentlyVerifiedSha256": "4c15dbac5aff259d2923dfe07564b9bf84b8b861ffd6a312107284e942a4bbc7",
+  "pattern": "byte at offset i equals i modulo 251"
+}

@@ -2,7 +2,7 @@
 
 2026-10-11: Empty workspace inspected. Rust 1.99 MSVC available; GitHub CLI is unauthenticated. Creating Rust 2024 workspace. Engine correctness precedes desktop work. Initial architecture consolidates networking/storage/scheduling in strata-core and CLI/desktop in strata-app; separate modules will keep these boundaries explicit.
 
-Release gate: do not tag 0.1.0 until engine tests, Windows binaries, and native launch have been verified. Secondary platforms require CI verification.
+Release gate: do not tag 0.1.0 until engine tests, Windows binaries, and native launch have been verified. Secondary platforms require actual builds and tests before support is claimed.
 
 Engine implementation: safe streamed HTTP/HTTPS, strict range probe/response validation, 64-bit offsets, durable SQLite snapshots, local prefix hashes, publication-boundary recovery, cooperative pause/cancel, resume/restart, retries with jitter/Retry-After, bounded concurrency, FIFO/priority queues, per-job limits, final-file SHA-256 verification. Core is independent of GUI.
 
@@ -13,3 +13,9 @@ Final evidence: Windows optimized binaries built; 25 workspace tests pass; forma
 Release infrastructure and documentation are present, including third-party notices and portable packaging. Source remains local: GitHub CLI/browser lack authentication and the connector cannot create repositories. Native manual UI automation timed out at helper approval; full manual review and secondary-platform/browser validation remain open. Do not claim stable 0.1.0 acceptance or publish a stable tag without those follow-ups.
 
 Final hardening: saturating range-bound calculation handles a malicious u64::MAX resource total without task panic/stuck state; probe-body reads now honor cancellation. All 26 substantive tests pass in targeted runs. Windows intermittently blocks newly built empty test wrappers, so the latest full-workspace invocation did not finish; no protection was bypassed. Release CLI still verifies the completed native-owned fixture. Portable ZIP contents have been checked byte-for-byte against the three release executables; BUILD.txt records the source commit and SHA256SUMS records the archive digest.
+
+## Phase 2, 2026-10-11
+
+Continued the existing source and published https://github.com/Sub2Nex/stratafetch. Clean-source full baseline tests passed; Code Integrity logs identified Smart App Control signing rejection as the earlier Windows failure cause. Implemented all ten Priority A areas, with documented scheduling/import/batch limits. Fixed concurrent destination reservation and queue admission races. Complete suite now has 32 substantive tests. Verified actual native-host/IPC, service-kill recovery/resume bytes, native framebuffer, browser registry cleanup, large streaming files and isolated NSIS install/uninstall. Docs/PHASE2.md, SECURITY-REVIEW-PHASE2.md and RELEASE-CHECKLIST.md record evidence and incomplete gates. Testing and packaging run locally. GitHub Actions and automated updates were disabled by request on 2026-10-13.
+
+2026-10-13: user explicitly requested no CI. Disabled repository Actions, removed workflows and automated dependency updates, and replaced hosted validation gates with local Windows checks. No account/billing changes are needed or performed.

@@ -1,0 +1,1 @@
+{"database":{"advisory-count":1309,"last-commit":"64a0302dc836df15a10ac27ebdcdf8f9b4ce845a","last-updated":"2026-10-13T14:18:24+02:00"},"lockfile":{"dependency-count":470},"settings":{"target_arch":[],"target_os":[],"severity":null,"ignore":[],"informational_warnings":["unmaintained","unsound","notice"]},"vulnerabilities":{"found":false,"count":0,"list":[]},"warnings":{}}

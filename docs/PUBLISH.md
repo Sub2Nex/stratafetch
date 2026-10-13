@@ -1,24 +1,15 @@
-# Publishing the local repository
+# Publishing and local validation
 
-The GitHub connector is authenticated, but its available tools do not create repositories. GitHub CLI and the available browser session are unauthenticated. No repository or release was published during this build.
+Public source: https://github.com/Sub2Nex/stratafetch.
 
-After authenticating GitHub CLI, publish the existing committed source:
+All validation and packaging run locally. GitHub Actions is disabled and hosted workflows and automated dependency-update configuration are removed by user request. No billing configuration or hosted runner is required. Linux/macOS support remains unverified until actual builds/tests on those platforms pass.
 
-```sh
-gh auth login
-gh repo create stratafetch --public --source=. --remote=origin --push
-```
-
-If the name already exists under your account, inspect that repository before choosing a new name or adding a remote. Do not replace an existing project.
-
-Run the Verify workflow on all three platforms. Enable GitHub private vulnerability reporting in repository settings. The Release artifacts workflow is manual and uploads unsigned portable artifacts to Actions; it does not publish a GitHub release automatically.
-
-Only after documented acceptance criteria pass:
+Follow RELEASE-CHECKLIST.md before publishing. Experimental Windows prereleases must clearly disclose unsigned binaries, manual GUI/browser checks, and remaining fault/security hardening. Stable release requirements are stricter. Rebuild packages from a clean committed source revision, compare archive executables to build outputs and publish their exact SHA256SUMS.
 
 ```sh
-git tag -a v0.1.0 -m 'StrataFetch 0.1.0'
-git push origin v0.1.0
-gh release create v0.1.0 dist/stratafetch-windows-x64.zip dist/SHA256SUMS --title 'StrataFetch 0.1.0' --notes-file CHANGELOG.md
+git tag -a VERSION -m 'StrataFetch VERSION'
+git push origin VERSION
+gh release create VERSION dist/stratafetch-windows-x64.zip dist/stratafetch-windows-x64-setup.exe dist/SHA256SUMS --prerelease --title 'StrataFetch VERSION' --notes-file docs/RELEASE-NOTES.md
 ```
 
-These are future commands, not evidence of a release. Resolve the native launch/application-control blocker, platform validation, browser validation, and security hardening before using them for a stable release.
+These are publication instructions; the Releases page is authoritative about published versions. Hosted checks are neither invoked nor claimed.

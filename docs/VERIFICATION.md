@@ -1,5 +1,7 @@
 # Verification record
 
+Phase 2 supersedes the preview results below. See [PHASE2.md](PHASE2.md) for clean-source workspace tests, evidence identifying Smart App Control, implemented controls, real process-kill/native-host checks, installer checks and publication blockers. All 32 substantive tests currently pass in a complete workspace invocation. The source is public at https://github.com/Sub2Nex/stratafetch. GitHub Actions is disabled by request; local validation is the release standard. Linux/macOS remain unverified. Stable release acceptance remains open.
+
 Environment: Windows x64, Rust 1.99.0 stable MSVC, 2026-10-11. This is an unsigned development preview, not an accepted stable release.
 
 ## Passed checks

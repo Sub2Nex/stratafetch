@@ -1,6 +1,6 @@
 # Architecture
 
-`strata-core` is independent of the GUI. `Manager` owns SQLite state, jobs, a bounded concurrent-job semaphore, control channels, and an HTTP client. `network` performs streaming probe/range/single-stream transfers; `storage` maintains integrity-checked JSON job snapshots in SQLite. Separate crates for these modules are deferred until their APIs stabilize.
+`strata-core` is independent of the GUI. `Manager` owns SQLite state, jobs, serialized queue admission, control channels, persisted engine settings, aggregate payload pacing and an HTTP client. `network` performs streaming probe/range/single-stream transfers; `storage` maintains integrity-checked JSON job snapshots and settings in SQLite; `history` validates portable recipes. Separate crates for these modules are deferred until their APIs stabilize.
 
 `strata-app` contains the native desktop, CLI, native messaging host, typed commands, and OS-local IPC. The desktop sends bounded commands to a Tokio runtime on another thread and renders snapshots. Network, disk, and database work does not execute on its rendering thread. Virtualized history rows avoid drawing the entire history.
 
@@ -20,4 +20,6 @@ An exclusive state lock prevents competing writers. IPC uses named pipes on Wind
 
 ## Extension points
 
-Protocol adapters, dynamic segment splitting, scheduled queues, categories, structured authenticated requests, HLS/DASH parsers and muxing, and explicit remote control can be added behind core interfaces. These are not implemented in this preview.
+Phase 2 adds categories, optional extension folders, per-job UTC start times, runtime concurrency/connection settings, global throttling, bounded batch controls and history recipes. The queue skips future jobs and admits due jobs by priority/FIFO. Settings survive engine restarts. Schedules require a running engine and interrupted queued work reopens paused. Imports recreate paused jobs with fresh IDs; exported absolute paths and checkpoint state are never restored. Active partial downloads keep their segment layout when defaults change.
+
+Protocol adapters, dynamic segment splitting, structured authenticated requests, HLS/DASH parsers and muxing, and explicit remote control can be added behind core interfaces. These are not implemented in this preview. IPC history pagination and replacing one polling task per queued job with a scalable dispatcher remain important before very large histories/queues are supported confidently.

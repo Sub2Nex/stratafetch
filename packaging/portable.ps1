@@ -4,7 +4,7 @@ $outputPath = Join-Path $workspacePath 'dist'
 $packagePath = Join-Path $outputPath 'stratafetch-windows-x64'
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 $sourceCommit = git -C $workspacePath rev-parse HEAD
-@("StrataFetch development preview","Source commit: $sourceCommit","Target: x86_64-pc-windows-msvc","Unsigned binaries. Native launch and rendering verified; full manual interaction review remains outstanding.","See docs/VERIFICATION.md for evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
+@("StrataFetch 0.1.0-alpha.1 — unsigned development preview","Source commit: $sourceCommit","Target: x86_64-pc-windows-msvc","Unsigned binaries. Native launch and rendering verified; full manual interaction review remains outstanding.","See docs/VERIFICATION.md for evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
 foreach ($binaryName in @('stratafetch.exe','stratafetch-desktop.exe','stratafetch-browser-host.exe')) {
     $binaryPath = Join-Path $workspacePath "target\release\$binaryName"
     if (-not (Test-Path -LiteralPath $binaryPath)) {throw "Build release binary first: $binaryName"}

@@ -6,3 +6,4 @@
 /.tools/
 /.smoke/
 
+/packaging/installer-files.nsh

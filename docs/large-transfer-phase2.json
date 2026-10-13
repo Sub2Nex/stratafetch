@@ -1,0 +1,8 @@
+{
+  "exitCode": 0,
+  "elapsedSeconds": 11.2336286,
+  "sampledPeakWorkingSetBytes": 19615744,
+  "bytes": 1073741824,
+  "independentlyVerifiedSha256": "9cc5601236c455c6af19a76e64d2d95953a93b10eeb8b8b756a57090e1499b3e",
+  "pattern": "byte at offset i equals i modulo 251"
+}

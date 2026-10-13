@@ -2,9 +2,11 @@
 
 A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
-**Development preview — release acceptance is still being verified.** No public release or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
+**Experimental Windows alpha — stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
-![Actual StrataFetch desktop during an 8 MiB fixture transfer](docs/screenshot.png)
+Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Release gates and evidence](docs/PHASE2.md) describe the locally tested alpha and its remaining limits.
+
+![Actual StrataFetch desktop after a verified crash-and-resume fixture transfer](docs/screenshot-phase2.png)
 
 ## Run
 
@@ -31,6 +33,10 @@ stratafetch resume DOWNLOAD_ID
 stratafetch cancel DOWNLOAD_ID
 stratafetch restart DOWNLOAD_ID
 stratafetch limit DOWNLOAD_ID 1048576
+stratafetch settings --connections 4 --concurrent-jobs 3 --global-bytes-per-second 1048576 --organize-by-extension
+stratafetch schedule DOWNLOAD_ID UNIX_UTC_TIME --category Work
+stratafetch export history.json
+stratafetch import history.json --directory ./downloads
 stratafetch verify DOWNLOAD_ID EXPECTED_SHA256
 stratafetch serve
 ```
@@ -48,18 +54,35 @@ With a desktop or `serve` instance running, commands use local IPC. Without one,
 | Recovery | Interrupted jobs become paused; durable bytes precede checkpoint writes |
 | Integrity | SHA-256 partial-prefix and completed-file checksums; GUI/CLI can re-read completed files for verification |
 | Concurrency | Three active jobs by default; queued jobs ordered by priority |
-| Limits | Per-download limit through CLI; pause before changing |
+| Limits | Aggregate bandwidth through GUI/CLI; per-download GUI/CLI limits and priority; pause before changing job settings |
 | Native desktop | Real progress, measured speed, speed graph, search, status filters, details, context menus |
 | Preferences | Destination, light/dark theme, core English/Swedish labels, window geometry |
 | Browser handoff | Experimental Chrome/Edge/Firefox extensions and Rust native host; manual registration |
-| Scheduling/categories/global bandwidth | Planned |
-| Tray, notifications, clipboard monitoring, drag/drop, multi-selection | Planned |
-| Authentication/custom headers/export | Planned; no embedded URL credentials accepted |
+| Scheduling/categories | Scheduled UTC starts while engine runs; categories, optional extension subfolders, priority/FIFO queues |
+| Batch controls/history recipes | Select up to 256 jobs for pause/resume/cancel; bounded JSON exports/imports recreate paused recipes |
+| Tray, notifications, clipboard monitoring, drag/drop | Planned |
+| Authentication/custom headers | Planned; no embedded URL credentials accepted |
 | HLS/DASH/DRM | Unsupported; direct MP4/WebM URLs work as ordinary files |
+
+## Comparison scope
+
+| Capability | StrataFetch preview | Established managers |
+|---|---|---|
+| Resume and bandwidth controls | Byte-validated HTTP resume and payload limits | FDM documents resume/traffic modes; JDownloader documents pause and bandwidth limits |
+| Organization and scheduling | Extension folders and timed starts while running | IDM and FDM document broader category/scheduler options |
+| Browser integration | Explicit handoff, experimental extensions | IDM documents mature browser integration and site exceptions |
+| Archive extraction/torrents | Not implemented | JDownloader documents archive extraction; FDM documents BitTorrent |
+| Public source | Entire Rust workspace, MIT OR Apache-2.0 | JDownloader describes open source; FDM labels open source specifically under legacy 3.9 features |
+
+This compares documented scope, not independently tested speed, reliability, or security. Sources checked 2026-10-11: [IDM options](https://www.internetdownloadmanager.com/support/options.html), [FDM features](https://www.freedownloadmanager.org/features.htm), [JDownloader overview](https://jdownloader.org/download/index).
 
 ## Platforms and downloads
 
-Windows x64 is the primary build target. Linux x64 and macOS are architecture/CI targets; support is only verified when their jobs pass. See [verification notes](docs/VERIFICATION.md) for actual local evidence. All generated binaries are unsigned. No signing or notarization is claimed. Portable packaging is provided; installer support remains planned.
+Windows x64 is the locally verified primary build target. Linux x64 and macOS remain unverified. All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
+
+Local packages are generated in `dist/` using [packaging instructions](docs/INSTALLATION.md). No public binary download is advertised until release gates pass. Installer uninstallation preserves download state and completed files. Browser integration is a separate opt-in registration step.
+
+History exports contain URLs, including any query tokens. Keep them private. Imports do not restore checkpoints or completed status and never start transfers automatically. Schedules need a running desktop/service and reopen paused after shutdown. Engine settings persist in SQLite; existing partial files keep their segment layouts.
 
 ## Browser integration
 
