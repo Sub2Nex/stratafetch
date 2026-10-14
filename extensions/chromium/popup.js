@@ -8,8 +8,16 @@ async function message(payload) {
   finally { document.getElementById("send").disabled = false; }
 }
 document.getElementById("current").onclick = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  document.getElementById("url").value = tab.url || "";
+  const current = document.getElementById("current");
+  current.disabled = true;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.url) throw new Error("Current tab URL is unavailable");
+    document.getElementById("url").value = tab.url;
+  } catch {
+    document.getElementById("url").value = "";
+    status.textContent = "Cannot read the current page URL. Paste a direct download URL instead.";
+  } finally { current.disabled = false; }
 };
 document.getElementById("send").onclick = () => message({ action: "add", url: document.getElementById("url").value });
 message({ action: "ping" });

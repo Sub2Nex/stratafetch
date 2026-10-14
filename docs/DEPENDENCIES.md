@@ -1,9 +1,17 @@
 # Dependency notices
 
-The portable package includes THIRD-PARTY-LICENSES.txt with available license and notice files from 476 locked dependency packages, including cross-platform and development dependencies. Bundled fonts and trust-root data retain their original licenses.
+The portable package includes THIRD-PARTY-LICENSES.txt with available license and notice files from 528 locked dependency packages, including cross-platform and development dependencies. Bundled fonts and trust-root data retain their original licenses.
 
-57 upstream crates do not ship a separate license text in their published package; their SPDX declaration and source link are recorded:
+65 upstream crates do not ship a separate license text in their published package; their SPDX declaration and source link are recorded:
 
+- accesskit_atspi_common@0.18.1
+- accesskit_consumer@0.35.0
+- accesskit_consumer@0.36.0
+- accesskit_consumer@0.38.0
+- accesskit_macos@0.26.3
+- accesskit_unix@0.21.1
+- accesskit_windows@0.32.1
+- accesskit_winit@0.32.2
 - accesskit@0.24.1
 - block2@0.5.1
 - block2@0.6.2

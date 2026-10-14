@@ -42,7 +42,7 @@ pub fn show(root: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action>
             ] {
                 ui.menu_button(text(state.prefs.swedish, menu), |ui| {
                     for (label, action) in items {
-                        if ui.button(label).clicked() {
+                        if ui.button(shortcut(label)).clicked() {
                             actions.push(action);
                             ui.close();
                         }
@@ -170,7 +170,7 @@ if button(ui,
 icon,
 text(state.prefs.swedish,label),
 enabled,
-tip){
+&shortcut(tip)){
 actions.push(action);
 }
 }
@@ -180,4 +180,12 @@ actions.push(action);
     });
 
     actions
+}
+
+fn shortcut(label: &str) -> String {
+    if cfg!(target_os = "macos") {
+        label.replace("Ctrl+", "⌘")
+    } else {
+        label.to_owned()
+    }
 }

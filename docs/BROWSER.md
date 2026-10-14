@@ -10,7 +10,15 @@
 
 Unregister with `./packaging/register-browser-host.ps1 -Uninstall`. To restrict cleanup to a particular installation, also pass its absolute native-host `-BinaryPath`. The script removes its registry entries and three native-host/origin manifests, preserving download history. Installer uninstallation attempts matching-host cleanup automatically. Remove extensions through the browser. Registrations require a matching unpacked extension ID; moving the extension may change its ID.
 
-Linux/macOS: create an official native-host manifest for `org.stratafetch.host` pointing to the compiled executable and place it in your browser's per-user NativeMessagingHosts directory. Populate the state directory's `browser-origins.json` with the exact allowed Chrome origin and/or `stratafetch@local`. These paths and installation flows are not locally verified.
+Linux/macOS: use the native host itself for explicit per-user registration, from its permanent installed location:
+
+```sh
+./stratafetch-browser-host --register --chrome-id YOUR_CHROME_EXTENSION_ID --firefox
+# Optional separate browser IDs: --chromium-id ID --edge-id ID
+./stratafetch-browser-host --unregister
+```
+
+Select only the browsers you use; `--firefox` registers `stratafetch@local`. On macOS use `StrataFetch.app/Contents/MacOS/stratafetch-browser-host`. Linux honors XDG_CONFIG_HOME for Chromium browsers and uses `~/.mozilla/native-messaging-hosts` for Firefox. macOS uses the official per-user browser folders under `~/Library/Application Support`. Registration refuses another installation's manifests or symbolic-link files; unregister validates ownership and preserves history and unrelated origins. Unregister before moving binaries, then register their new permanent path. Start the matching desktop or service afterward. Linux CLI registration and the actual native-host/IPC flow were exercised; installed-browser, sandboxed-browser and macOS runtime acceptance remain pending. See [platform evidence](PLATFORMS.md).
 
 The native host accepts only `ping` and `add` messages. It requires a running manager; it does not launch it automatically. Downloads go to the OS Downloads folder. No automatic interception, cookies, history collection, per-site rules, protected-service extraction, or stream detection is implemented. A current page URL downloads the page response, not embedded resources. Popup failures are shown; context-menu success/failure appears as a `+`/`!` extension badge and tooltip. Firefox and Chromium scripts are locally tested with mocked APIs; this does not substitute for installed-browser tests.
 

@@ -21,6 +21,12 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Add or remove this installation's per-user Linux desktop menu entry.
+    #[cfg(target_os = "linux")]
+    InstallDesktop {
+        #[arg(long)]
+        uninstall: bool,
+    },
     Export {
         path: PathBuf,
     },
@@ -102,6 +108,10 @@ async fn main() -> anyhow::Result<()> {
         Action::Add { .. } | Action::Resume { .. } | Action::Restart { .. }
     );
     let command = match args.command {
+        #[cfg(target_os = "linux")]
+        Action::InstallDesktop { uninstall } => {
+            return strata_app::linux_desktop::current(uninstall);
+        }
         Action::Export { path } => Command::ExportHistory { path },
         Action::Import { path, directory } => Command::ImportHistory { path, directory },
         Action::Settings {

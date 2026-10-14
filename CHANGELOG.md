@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add per-user Linux desktop-menu installation, Unix browser-host registration, private same-user IPC with long-path/crash recovery, macOS app bundling and DPI-aware icons.
+- Use Command shortcuts on macOS, enable AccessKit adapters and add asynchronous native folder pickers with protection against stale results.
+- Add a real Unix CLI/native-host ranged-download smoke test and document tested Linux behavior and pending macOS acceptance.
+
+- Produce a standalone `stratafetch-desktop.exe` alongside the Windows ZIP, and verify both artifact checksums and desktop binary identity.
+- Preserve semicolons and escaped quotes in metadata filenames; honor UTF-8 extended filenames with language tags and fall back when their bytes are invalid.
+- Show a paste-URL message instead of throwing when browser tab access fails or the current URL is unavailable; clear stale URLs.
+
 ## 0.1.0-alpha.3 — 2026-10-13
 
 - Replace per-job queue polling with one notification-driven dispatcher.

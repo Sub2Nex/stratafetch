@@ -26,6 +26,13 @@ Copy-Item -LiteralPath (Join-Path $workspacePath 'docs') -Destination $packagePa
 Copy-Item -LiteralPath $PSScriptRoot -Destination $packagePath -Recurse -Force
 $archivePath = Join-Path $outputPath 'stratafetch-windows-x64.zip'
 Compress-Archive -LiteralPath $packagePath -DestinationPath $archivePath -Force
-$hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  stratafetch-windows-x64.zip" | Set-Content -LiteralPath (Join-Path $outputPath 'SHA256SUMS') -Encoding ascii
+# Offer the desktop directly as well as the full CLI/browser integration bundle.
+$desktopPath = Join-Path $outputPath 'stratafetch-desktop.exe'
+Copy-Item -LiteralPath (Join-Path $packagePath 'stratafetch-desktop.exe') -Destination $desktopPath -Force
+$checksums = foreach ($artifactPath in @($archivePath, $desktopPath)) {
+    $hash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$hash  $([IO.Path]::GetFileName($artifactPath))"
+}
+$checksums | Set-Content -LiteralPath (Join-Path $outputPath 'SHA256SUMS') -Encoding ascii
 Write-Output $archivePath
+Write-Output $desktopPath

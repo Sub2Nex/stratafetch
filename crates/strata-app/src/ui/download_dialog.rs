@@ -86,6 +86,9 @@ ui.add(egui::TextEdit::singleline(&mut state.add.filename).desired_width(f32::IN
 
         ui.label("Destination directory");
 ui.add(egui::TextEdit::singleline(&mut state.add.folder).desired_width(f32::INFINITY));
+if ui.button("Choose folder…").clicked() {
+    requests.push(Request::ChooseFolder { target: FolderTarget::Add, initial: state.add.folder.clone() });
+}
 
         ui.horizontal(|ui| {
 ui.label("Category");

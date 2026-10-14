@@ -24,7 +24,7 @@ serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
-eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland", "persistence"] }
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 directories = "6"
 open = "5"
 tracing = "0.1"
@@ -32,9 +32,13 @@ tracing-subscriber = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 egui_extras = { version = "=0.36.2", default-features = false, features = ["serde"] }
 time = { version = "0.3.47", default-features = false, features = ["std"] }
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal", "common-controls-v6"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation"] }

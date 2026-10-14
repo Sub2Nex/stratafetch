@@ -108,7 +108,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
     let ctx = ui.ctx().clone();
 
     if state.table_keyboard(&ctx) {
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::A)) {
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::A)) {
             state.selection.all(&ordered);
         }
 
@@ -620,6 +620,30 @@ mod tests {
     }
 
     #[test]
+    fn control_and_macos_command_select_all() {
+        let (_dir, jobs) = records();
+        for modifiers in [
+            egui::Modifiers {
+                ctrl: true,
+                command: true,
+                ..Default::default()
+            },
+            egui::Modifiers {
+                mac_cmd: true,
+                command: true,
+                ..Default::default()
+            },
+        ] {
+            let ctx = egui::Context::default();
+            let mut state = State::new(Default::default());
+            frame(&ctx, &mut state, &jobs, vec![]);
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("focused_row")));
+            frame(&ctx, &mut state, &jobs, vec![key(egui::Key::A, modifiers)]);
+            assert_eq!(state.selection.ids.len(), 3);
+        }
+    }
+
+    #[test]
     fn focused_row_accepts_keyboard_but_dialog_and_search_do_not() {
         let (_dir, jobs) = records();
 
@@ -635,7 +659,7 @@ mod tests {
             &ctx,
             &mut state,
             &jobs,
-            vec![key(egui::Key::A, egui::Modifiers::CTRL)],
+            vec![key(egui::Key::A, egui::Modifiers::COMMAND)],
         );
 
         assert_eq!(state.selection.ids.len(), 3);
@@ -661,7 +685,7 @@ mod tests {
             &ctx,
             &mut state,
             &jobs,
-            vec![key(egui::Key::A, egui::Modifiers::CTRL)],
+            vec![key(egui::Key::A, egui::Modifiers::COMMAND)],
         );
 
         assert!(state.selection.ids.is_empty());

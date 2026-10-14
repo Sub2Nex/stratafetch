@@ -28,11 +28,21 @@ try {
     $sourceCommit = git -C $workspacePath rev-parse HEAD
     if (-not $metadata.Contains("Source commit: $sourceCommit")) {throw 'Package source revision differs from HEAD'}
 } finally { $archive.Dispose() }
+$desktopPath = Join-Path $workspacePath 'dist\stratafetch-desktop.exe'
+$desktopHash = (Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$builtDesktopHash = (Get-FileHash -LiteralPath (Join-Path $workspacePath 'target\release\stratafetch-desktop.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($desktopHash -ne $builtDesktopHash) { throw 'Standalone desktop executable differs from build' }
+$checkedArtifacts = @{}
 foreach ($line in Get-Content -LiteralPath (Join-Path $workspacePath 'dist\SHA256SUMS')) {
     if ($line -notmatch '^([a-f0-9]{64})  ([a-zA-Z0-9._-]+)$') {throw 'Malformed SHA256SUMS'}
     $expectedHash = $Matches[1]; $name = $Matches[2]
+    if ($checkedArtifacts.ContainsKey($name)) { throw "Duplicate artifact checksum: $name" }
     $actual = (Get-FileHash -LiteralPath (Join-Path $workspacePath "dist\$name") -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $expectedHash) {throw "Package checksum mismatch: $name"}
+    $checkedArtifacts[$name] = $true
+}
+foreach ($name in @('stratafetch-windows-x64.zip', 'stratafetch-desktop.exe')) {
+    if (-not $checkedArtifacts.ContainsKey($name)) { throw "Missing artifact checksum: $name" }
 }
 if (-not $PortableOnly -and (Get-AuthenticodeSignature -LiteralPath (Join-Path $workspacePath 'dist\stratafetch-windows-x64-setup.exe')).Status -ne 'NotSigned') {throw 'Review unexpected installer signature status'}
 Write-Output 'ZIP executable hashes, required files, source revision and artifact checksums verified. Installer checked only when requested.'

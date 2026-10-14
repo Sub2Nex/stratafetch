@@ -54,6 +54,7 @@ match state.settings_page {
 ui.strong("General");
 ui.label("Default destination directory");
 ui.add(egui::TextEdit::singleline(&mut state.prefs.folder).desired_width(f32::INFINITY));
+if ui.button("Choose folder…").clicked() { state.choose_preferences_folder = true; }
 ui.checkbox(&mut state.prefs.open_completed,
 "Double-click completed downloads to open the file");
 ui.small("Otherwise double-click opens transfer details. Files are never opened automatically by default.");
@@ -177,7 +178,7 @@ ui.label("Native Rust · MIT OR Apache-2.0");
 ui.label("No ads, telemetry or required account.");
 ui.hyperlink_to("Public source",
 "https://github.com/Sub2Nex/stratafetch");
-ui.label("Windows binaries are unsigned. Browser integration and secondary platforms remain unverified.");
+ui.label("Experimental desktop preview. See the documentation for platform support and browser setup.");
 }
 ,
 

@@ -39,4 +39,25 @@ for (const [folder, namespace] of [['chromium', 'chrome'], ['firefox', 'browser'
     assert.equal(manifest.host_permissions, undefined);
     assert.equal(manifest.content_scripts, undefined);
   });
+  for (const result of ['empty', 'restricted', 'error']) {
+    test(`${folder}: current page ${result} shows a useful error`, async () => {
+      const elements = Object.fromEntries(['status', 'send', 'current', 'url'].map(id => [id, { value: 'https://example.org/previous.zip' }]));
+      const api = {
+        runtime: { async sendNativeMessage() { return { ok: true, active: 0 }; } },
+        tabs: { async query() {
+          if (result === 'error') throw new Error('Tab access denied');
+          return result === 'empty' ? [] : [{ id: 1 }];
+        } },
+      };
+      runInNewContext(readFileSync(new URL(`../extensions/${folder}/popup.js`, import.meta.url), 'utf8'), {
+        [namespace]: api, document: { getElementById(id) { return elements[id]; } },
+      });
+      // Let the initial native-host ping finish before selecting a tab.
+      await Promise.resolve();
+      await elements.current.onclick();
+      assert.equal(elements.url.value, '');
+      assert.match(elements.status.textContent, /cannot read.*paste/i);
+      assert.equal(elements.current.disabled, false);
+    });
+  }
 }

@@ -1,7 +1,13 @@
 //! Shared command interface for CLI, desktop, and browser native messaging.
 pub mod branding;
+#[cfg(unix)]
+pub mod browser_registration;
 pub mod ipc;
+#[cfg(target_os = "linux")]
+pub mod linux_desktop;
 pub mod native;
+#[cfg(unix)]
+mod unix_files;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

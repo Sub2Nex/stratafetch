@@ -143,7 +143,8 @@ async fn read_pages(stream: &mut (impl AsyncRead + Unpin)) -> Result<Reply> {
         index += 1;
     }
 }
-fn endpoint(directory: &Path) -> String {
+#[cfg(windows)]
+fn endpoint(directory: &Path) -> Result<String> {
     let canonical = directory
         .canonicalize()
         .unwrap_or_else(|_| directory.to_path_buf());
@@ -151,16 +152,59 @@ fn endpoint(directory: &Path) -> String {
         "{:x}",
         Sha256::digest(canonical.to_string_lossy().as_bytes())
     );
-    #[cfg(windows)]
-    {
-        format!("\\\\.\\pipe\\stratafetch-{}", &key[..32])
+    Ok(format!("\\\\.\\pipe\\stratafetch-{}", &key[..32]))
+}
+#[cfg(unix)]
+fn user_id() -> u32 {
+    // SAFETY: geteuid takes no arguments and does not access caller memory.
+    unsafe { libc::geteuid() }
+}
+#[cfg(unix)]
+fn endpoint(directory: &Path) -> Result<String> {
+    use std::os::unix::{
+        ffi::OsStrExt,
+        fs::{DirBuilderExt, MetadataExt, PermissionsExt},
+    };
+    // macOS sun_path is only 104 bytes. State can live in a much longer path;
+    // a short, private, per-user location also works across CLI/browser launch environments.
+    let root = std::path::PathBuf::from(format!("/tmp/stratafetch-{}", user_id()));
+    match std::fs::DirBuilder::new().mode(0o700).create(&root) {
+        Ok(()) => (),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(error) => return Err(error.into()),
     }
-    #[cfg(unix)]
-    {
-        directory
-            .join(format!("ipc-{}.sock", &key[..12]))
-            .to_string_lossy()
-            .into_owned()
+    let metadata = std::fs::symlink_metadata(&root)?;
+    ensure!(
+        metadata.is_dir()
+            && !metadata.file_type().is_symlink()
+            && metadata.uid() == user_id()
+            && metadata.permissions().mode() & 0o077 == 0,
+        "IPC directory must be owned by this user with private permissions: {}",
+        root.display()
+    );
+    let canonical = directory.canonicalize()?;
+    let key = format!("{:x}", Sha256::digest(canonical.as_os_str().as_bytes()));
+    Ok(root
+        .join(format!("ipc-{}.sock", &key[..32]))
+        .to_string_lossy()
+        .into_owned())
+}
+#[cfg(unix)]
+struct SocketCleanup {
+    path: String,
+    device: u64,
+    inode: u64,
+}
+#[cfg(unix)]
+impl Drop for SocketCleanup {
+    fn drop(&mut self) {
+        use std::os::unix::fs::MetadataExt;
+        if let Ok(metadata) = std::fs::symlink_metadata(&self.path)
+            && metadata.dev() == self.device
+            && metadata.ino() == self.inode
+        {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 async fn write_frame<T: serde::Serialize>(
@@ -201,7 +245,7 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
     #[cfg(windows)]
     {
         let stream =
-            tokio::net::windows::named_pipe::ClientOptions::new().open(endpoint(directory))?;
+            tokio::net::windows::named_pipe::ClientOptions::new().open(endpoint(directory)?)?;
         tokio::time::timeout(
             std::time::Duration::from_secs(15),
             exchange(stream, command),
@@ -210,7 +254,11 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
     }
     #[cfg(unix)]
     {
-        let stream = tokio::net::UnixStream::connect(endpoint(directory)).await?;
+        let stream = tokio::net::UnixStream::connect(endpoint(directory)?).await?;
+        ensure!(
+            stream.peer_cred()?.uid() == user_id(),
+            "IPC service belongs to another user"
+        );
         tokio::time::timeout(
             std::time::Duration::from_secs(15),
             exchange(stream, command),
@@ -240,7 +288,7 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
     let capacity = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
     #[cfg(windows)]
     {
-        let name = endpoint(directory);
+        let name = endpoint(directory)?;
         let mut server = create_pipe(&name, true)?;
         loop {
             server.connect().await?;
@@ -258,15 +306,43 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
     }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let name = endpoint(directory);
-        if Path::new(&name).exists() {
-            std::fs::remove_file(&name)?;
+        use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+        let name = endpoint(directory)?;
+        match std::fs::symlink_metadata(&name) {
+            Ok(metadata) => {
+                ensure!(
+                    metadata.file_type().is_socket() && metadata.uid() == user_id(),
+                    "Refusing to replace a non-socket or foreign IPC endpoint"
+                );
+                match tokio::net::UnixStream::connect(&name).await {
+                    Ok(_) => anyhow::bail!("A local service is already listening"),
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound
+                        ) =>
+                    {
+                        std::fs::remove_file(&name)?;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error.into()),
         }
         let listener = tokio::net::UnixListener::bind(&name)?;
+        let metadata = std::fs::symlink_metadata(&name)?;
+        let _cleanup = SocketCleanup {
+            path: name.clone(),
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        };
         std::fs::set_permissions(&name, std::fs::Permissions::from_mode(0o600))?;
         loop {
             let (connected, _) = listener.accept().await?;
+            if connected.peer_cred()?.uid() != user_id() {
+                continue;
+            }
             let manager = manager.clone();
             let permit = capacity.clone().acquire_owned().await?;
             tokio::spawn(async move {
@@ -282,6 +358,52 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_long_paths_stale_sockets_and_cleanup() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("long-directory-".repeat(10)).join("state");
+        let manager = Manager::open(&state, Default::default()).unwrap();
+        let name = endpoint(&state).unwrap();
+        assert!(name.len() < 104);
+        // Dropping a Unix listener leaves a socket, as does a killed service.
+        drop(std::os::unix::net::UnixListener::bind(&name).unwrap());
+        let service = tokio::spawn({
+            let state = state.clone();
+            let manager = manager.clone();
+            async move { serve(&state, manager).await }
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if call(&state, Command::List).await.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::metadata(&name).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert!(
+            serve(&state, manager.clone()).await.is_err(),
+            "must preserve an active listener"
+        );
+        assert!(call(&state, Command::List).await.is_ok());
+        service.abort();
+        let _ = service.await;
+        assert!(
+            !Path::new(&name).exists(),
+            "aborting the service cleans up its own socket"
+        );
+        std::fs::write(&name, b"user file").unwrap();
+        assert!(serve(&state, manager).await.is_err());
+        assert_eq!(std::fs::read(&name).unwrap(), b"user file");
+        std::fs::remove_file(name).unwrap();
+    }
     #[tokio::test]
     async fn oversized_ipc_frame_rejected_before_allocation() {
         let (mut sender, mut receiver) = tokio::io::duplex(64);

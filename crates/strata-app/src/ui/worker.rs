@@ -1,3 +1,4 @@
+use super::ui_state::FolderTarget;
 use eframe::egui;
 
 use std::{
@@ -19,6 +20,10 @@ pub enum Request {
     Sequence(Vec<Command>),
 
     Probe(String),
+    ChooseFolder {
+        target: FolderTarget,
+        initial: String,
+    },
 
     Add {
         url: String,
@@ -47,6 +52,11 @@ pub enum Event {
         id: String,
 
         description: String,
+    },
+    FolderSelected {
+        target: FolderTarget,
+        initial: String,
+        path: PathBuf,
     },
 }
 
@@ -201,10 +211,33 @@ impl Worker {
                 };
 
                 while let Some(request) = requests.recv().await {
-                    if !matches!(request, Request::Probe(_)) {
+                    if !matches!(request, Request::Probe(_) | Request::ChooseFolder { .. }) {
                         snapshots.1.fetch_add(1, Ordering::SeqCst);
                     }
                     let reply = match request {
+                        Request::ChooseFolder { target, initial } => {
+                            let events = events.clone();
+                            let ctx = ctx.clone();
+                            tokio::spawn(async move {
+                                let mut dialog = rfd::AsyncFileDialog::new()
+                                    .set_title("Choose download directory");
+                                if std::path::Path::new(&initial).is_dir() {
+                                    dialog = dialog.set_directory(&initial);
+                                }
+                                if let Some(folder) = dialog.pick_folder().await {
+                                    emit(
+                                        &events,
+                                        &ctx,
+                                        Event::FolderSelected {
+                                            target,
+                                            initial,
+                                            path: folder.path().to_owned(),
+                                        },
+                                    );
+                                }
+                            });
+                            continue;
+                        }
                         Request::Probe(url) => {
                             let events = events.clone();
 

@@ -3,6 +3,12 @@ use anyhow::{Result, ensure};
 use strata_app::{Command, download_dir, ipc, native, state_dir};
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args
+        .first()
+        .is_some_and(|arg| matches!(arg.as_str(), "--register" | "--unregister"))
+    {
+        return registration(args);
+    }
     let allowlist: Vec<String> =
         serde_json::from_slice(&std::fs::read(state_dir().join("browser-origins.json"))?)?;
     ensure!(
@@ -40,6 +46,57 @@ fn run() -> Result<()> {
         native::write_message(&mut output, &response)?;
     }
     Ok(())
+}
+#[cfg(unix)]
+fn registration(args: Vec<String>) -> Result<()> {
+    use clap::Parser;
+    use strata_app::browser_registration::{Browser, Paths, register, unregister};
+    #[derive(Parser)]
+    struct Args {
+        #[arg(long, conflicts_with = "unregister")]
+        register: bool,
+        #[arg(long, conflicts_with = "register")]
+        unregister: bool,
+        #[arg(long)]
+        chrome_id: Option<String>,
+        #[arg(long)]
+        chromium_id: Option<String>,
+        #[arg(long)]
+        edge_id: Option<String>,
+        #[arg(long)]
+        firefox: bool,
+    }
+    let args = Args::parse_from(std::iter::once("stratafetch-browser-host".to_owned()).chain(args));
+    let paths = Paths::current()?;
+    let binary = std::env::current_exe()?;
+    if args.unregister {
+        unregister(&paths, &binary)?;
+        println!("Browser registration removed; downloads and history preserved.");
+    } else {
+        let mut browsers = std::collections::BTreeMap::new();
+        for (browser, id) in [
+            (Browser::Chrome, args.chrome_id),
+            (Browser::Chromium, args.chromium_id),
+            (Browser::Edge, args.edge_id),
+        ] {
+            if let Some(id) = id {
+                browsers.insert(browser, id);
+            }
+        }
+        if args.firefox {
+            browsers.insert(Browser::Firefox, "stratafetch@local".into());
+        }
+        register(&paths, &binary, browsers)?;
+        println!(
+            "Browser registration saved for this user. Keep the native host at {} and start the desktop or CLI service.",
+            binary.display()
+        );
+    }
+    Ok(())
+}
+#[cfg(not(unix))]
+fn registration(_args: Vec<String>) -> Result<()> {
+    anyhow::bail!("On Windows, use packaging/register-browser-host.ps1")
 }
 fn main() {
     if let Err(error) = run() {

@@ -2,7 +2,7 @@
 
 A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
-**Experimental Windows alpha — stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
+**Experimental desktop alpha — published releases currently target Windows; stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
 Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Windows prereleases](https://github.com/Sub2Nex/stratafetch/releases). [Desktop redesign and local evidence](docs/PHASE3.md) describe the locally tested alpha and its remaining limits.
 
@@ -82,7 +82,7 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 ## Platforms and downloads
 
-Windows x64 is the locally verified primary build target. Linux x64 and macOS remain unverified. All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
+Windows x64 is the primary published build target. Current development also builds and runs on Linux x64, with desktop-menu and browser-host integration. macOS app bundling and OS integration are prepared, but native Mac builds/tests remain pending. See [platform setup and evidence](docs/PLATFORMS.md). All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
 
 Download the unsigned [alpha.2 portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/stratafetch-windows-x64.zip) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/SHA256SUMS). Alpha.2 includes no new installer. The historical alpha.1 installer remains experimental; its final unsigned build was blocked by application control here. Do not disable protection. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) reproduce the local build.
 
@@ -101,7 +101,7 @@ cargo test --workspace --locked
 cargo doc --workspace --no-deps --locked
 ```
 
-Tests use local servers and do not depend on public downloads. [Architecture](ARCHITECTURE.md), [security](SECURITY.md), [privacy](PRIVACY.md), [contributing](CONTRIBUTING.md), and [roadmap](ROADMAP.md) describe the design and remaining work. The compact workspace separates the reusable engine from application clients, with networking and storage in separate modules.
+Tests use local servers and do not depend on public downloads. `node --test scripts/unix-smoke.mjs` additionally exercises the real Unix CLI/native-host download flow after a debug build. Linux/macOS build, packaging, native folder dialogs and per-user integration are documented in [PLATFORMS.md](docs/PLATFORMS.md). [Architecture](ARCHITECTURE.md), [security](SECURITY.md), [privacy](PRIVACY.md), [contributing](CONTRIBUTING.md), and [roadmap](ROADMAP.md) describe the design and remaining work. The compact workspace separates the reusable engine from application clients, with networking and storage in separate modules.
 
 ## License
 

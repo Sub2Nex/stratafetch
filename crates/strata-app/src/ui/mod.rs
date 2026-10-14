@@ -300,6 +300,13 @@ impl App {
 
         while let Ok(event) = self.worker.events.try_recv() {
             match event {
+                Event::FolderSelected {
+                    target,
+                    initial,
+                    path,
+                } => {
+                    self.state.apply_folder(target, &initial, path);
+                }
                 Event::Message(message) => self.state.message = Some(message),
 
                 Event::Added { id, description } => {
@@ -424,11 +431,11 @@ impl App {
     }
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::N)) {
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::N)) {
             self.state.show_add();
         }
 
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::Comma)) {
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma)) {
             self.state.settings_open = true;
         }
 
@@ -457,7 +464,7 @@ impl App {
                 (egui::Key::R, Action::Resume),
                 (egui::Key::P, Action::Pause),
             ] {
-                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, key)) {
+                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, key)) {
                     self.action(action);
                 }
             }
@@ -626,6 +633,12 @@ impl eframe::App for App {
 
         for command in settings::show(&ctx, &mut self.state) {
             self.command(command);
+        }
+        if std::mem::take(&mut self.state.choose_preferences_folder) {
+            self.request(Request::ChooseFolder {
+                target: ui_state::FolderTarget::Preferences,
+                initial: self.state.prefs.folder.clone(),
+            });
         }
 
         settings::columns(&ctx, &mut self.state);

@@ -31,22 +31,53 @@ pub fn identity(raw: &str) -> Result<Metadata> {
 }
 fn disposition(raw: &str) -> Option<String> {
     let mut ordinary = None;
-    for part in raw.split(';').skip(1) {
+    let mut quoted = false;
+    let mut escaped = false;
+    // A semicolon inside a quoted filename is part of the name, not a delimiter.
+    let parameters = raw.split(|c| {
+        if escaped {
+            escaped = false;
+        } else if quoted && c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            quoted = !quoted;
+        } else {
+            return c == ';' && !quoted;
+        }
+        false
+    });
+    for part in parameters.skip(1) {
         let Some((key, value)) = part.trim().split_once('=') else {
             continue;
         };
-        let value = value.trim().trim_matches('"');
-        if key.eq_ignore_ascii_case("filename*")
-            && let Some(encoded) = value
-                .strip_prefix("UTF-8''")
-                .or_else(|| value.strip_prefix("utf-8''"))
-        {
-            return Some(crate::sanitize_filename(
-                &percent_encoding::percent_decode_str(encoded).decode_utf8_lossy(),
-            ));
+        let value = value.trim();
+        if key.eq_ignore_ascii_case("filename*") {
+            let mut parts = value.splitn(3, '\'');
+            if parts
+                .next()
+                .is_some_and(|charset| charset.eq_ignore_ascii_case("utf-8"))
+                && parts.next().is_some()
+                && let Some(encoded) = parts.next()
+                && let Ok(decoded) = percent_encoding::percent_decode_str(encoded).decode_utf8()
+            {
+                return Some(crate::sanitize_filename(&decoded));
+            }
         }
         if key.eq_ignore_ascii_case("filename") {
-            ordinary = Some(crate::sanitize_filename(value));
+            let value = if let Some(inner) = value.strip_prefix('"') {
+                let Some(inner) = inner.strip_suffix('"') else {
+                    continue;
+                };
+                let mut chars = inner.chars();
+                let mut decoded = String::new();
+                while let Some(c) = chars.next() {
+                    decoded.push(if c == '\\' { chars.next()? } else { c });
+                }
+                decoded
+            } else {
+                value.to_owned()
+            };
+            ordinary = Some(crate::sanitize_filename(&value));
         }
     }
     ordinary
@@ -107,6 +138,30 @@ pub async fn probe(raw: &str) -> Result<Metadata> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn metadata_preserves_quoted_filename_parameters() {
+        assert_eq!(
+            disposition("attachment; filename=\"report; final.pdf\"; size=123").unwrap(),
+            "report; final.pdf"
+        );
+        assert_eq!(
+            disposition(r#"attachment; filename="report\"; final.pdf""#).unwrap(),
+            "report_; final.pdf"
+        );
+    }
+    #[test]
+    fn metadata_prefers_extended_filename_with_language_tag() {
+        for header in [
+            "attachment; filename=fallback.zip; filename*=UTF-8'en'r%C3%A4ksm%C3%B6rg%C3%A5s.zip",
+            "attachment; filename*=UtF-8'sv'r%C3%A4ksm%C3%B6rg%C3%A5s.zip; filename=fallback.zip",
+        ] {
+            assert_eq!(disposition(header).unwrap(), "räksmörgås.zip");
+        }
+        assert_eq!(
+            disposition("attachment; filename=fallback.zip; filename*=UTF-8''%FF").unwrap(),
+            "fallback.zip"
+        );
+    }
     #[test]
     fn metadata_names_cannot_escape_destination() {
         assert_eq!(

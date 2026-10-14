@@ -334,6 +334,12 @@ pub struct TransferDraft {
     pub delay_minutes: u64,
 }
 
+#[derive(Clone, Copy)]
+pub enum FolderTarget {
+    Add,
+    Preferences,
+}
+
 pub struct State {
     pub prefs: Preferences,
 
@@ -364,6 +370,7 @@ pub struct State {
     pub draft: Option<TransferDraft>,
 
     pub settings_open: bool,
+    pub choose_preferences_folder: bool,
 
     pub settings_page: usize,
 
@@ -383,6 +390,20 @@ pub struct State {
 }
 
 impl State {
+    /// Ignore a late native-dialog result after closing the form or editing its path.
+    pub fn apply_folder(&mut self, target: FolderTarget, initial: &str, path: std::path::PathBuf) {
+        let (open, field) = match target {
+            FolderTarget::Add => (self.add.open, &mut self.add.folder),
+            FolderTarget::Preferences => (self.settings_open, &mut self.prefs.folder),
+        };
+        if open && field == initial {
+            if let Some(path) = path.to_str() {
+                *field = path.to_owned();
+            } else {
+                self.message = Some("This directory path is not valid UTF-8. Choose another directory or enter a supported path.".into());
+            }
+        }
+    }
     pub fn new(mut prefs: Preferences) -> Self {
         let mut columns = HashSet::new();
         prefs.columns.retain(|column| columns.insert(*column));
@@ -419,6 +440,7 @@ impl State {
             draft: None,
 
             settings_open: false,
+            choose_preferences_folder: false,
 
             settings_page: 0,
 
@@ -612,6 +634,33 @@ pub fn modifiers(ctx: &egui::Context) -> (bool, bool) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn late_folder_dialog_results_preserve_closed_forms_and_manual_edits() {
+        use super::{FolderTarget, State};
+        let mut state = State::new(Default::default());
+        state.add.open = true;
+        state.add.folder = "original".into();
+        state.apply_folder(FolderTarget::Add, "original", "selected".into());
+        assert_eq!(state.add.folder, "selected");
+        state.add.folder = "typed manually".into();
+        state.apply_folder(FolderTarget::Add, "original", "stale".into());
+        assert_eq!(state.add.folder, "typed manually");
+        state.settings_open = false;
+        state.prefs.folder = "original".into();
+        state.apply_folder(FolderTarget::Preferences, "original", "stale".into());
+        assert_eq!(state.prefs.folder, "original");
+        state.settings_open = true;
+        state.apply_folder(FolderTarget::Preferences, "original", "selected".into());
+        assert_eq!(state.prefs.folder, "selected");
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            let path = std::ffi::OsString::from_vec(b"/tmp/non-utf8-\xff".to_vec());
+            state.apply_folder(FolderTarget::Preferences, "selected", path.into());
+            assert_eq!(state.prefs.folder, "selected");
+            assert!(state.message.as_ref().unwrap().contains("UTF-8"));
+        }
+    }
 
     use super::*;
 

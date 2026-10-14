@@ -4,6 +4,8 @@ StrataFetch is an unsigned development preview. Public source: https://github.co
 
 ## Portable ZIP
 
+Windows packaging also produces a standalone `stratafetch-desktop.exe` for direct download. When offered as a release asset, save it to a permanent folder and run it to launch the desktop. It is portable, not an installer. Use the ZIP below for the CLI, native browser host, extensions and documentation. Verify the executable against the release's `SHA256SUMS` (or `SHA256SUMS-desktop` for an executable added to an existing release).
+
 Extract `stratafetch-windows-x64.zip` to a permanent folder and run `stratafetch-desktop.exe`. The CLI is `stratafetch.exe`. No Rust installation is needed for binaries. Verify SHA-256 against `SHA256SUMS` using `Get-FileHash` before running downloaded packages. Treat unsigned publisher/application-control warnings accurately; the project does not recommend disabling security protection.
 
 ## Per-user installer
@@ -42,3 +44,7 @@ The desktop redesign prerelease includes the portable ZIP and SHA256SUMS. No new
 Download the ZIP and SHA256SUMS from https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.3. Close the existing desktop and service, back up user state, and replace all three executables together. New IPC clients require the matching service. Re-register the native host if its permanent executable path changes. Default download history lives outside the installation folder; schema 2 and existing IDs/checkpoints are preserved.
 
 This release distributes no installer. The compiled installer still lacks runtime upgrade/uninstall acceptance. Unsigned executables can be rejected by Windows application control; do not change security settings to force them to run.
+
+## Linux and macOS development packages
+
+Run `cargo build --release --workspace --bins --locked`, then `bash packaging/portable.sh` on the target OS/architecture. Linux gets an architecture-specific archive and per-user menu integration through `stratafetch install-desktop`. macOS gets an architecture-specific archive containing `StrataFetch.app`, its icon/manifest and all three executables. Each archive has a separate platform-specific checksum file, preserving Windows checksums. See [PLATFORMS.md](PLATFORMS.md) for prerequisites, tested capabilities and outstanding native Mac validation. These development changes are not part of the historical alpha.3 assets.

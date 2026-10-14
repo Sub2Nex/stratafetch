@@ -31,7 +31,7 @@ async fn metadata_probe_uses_headers_and_handles_head_fallback_without_creating_
                         .header("content-length", "12345")
                         .header(
                             "content-disposition",
-                            "attachment; filename*=UTF-8''my%20archive.zip",
+                            "attachment; filename=fallback.zip; filename*=UTF-8'en'my%20archive.zip",
                         )
                         .body(Body::empty())
                         .unwrap()
