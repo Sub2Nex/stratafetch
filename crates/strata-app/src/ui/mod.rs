@@ -141,7 +141,17 @@ impl App {
 
     fn request(&mut self, request: Request) {
         if let Err(error) = self.worker.commands.try_send(request) {
-            self.state.message = Some(format!("Engine unavailable or busy: {error}"));
+            let message = format!("Engine unavailable or busy: {error}");
+            if let Request::Probe {
+                url,
+                form_id,
+                probe_id,
+            } = error.into_inner()
+            {
+                self.state
+                    .apply_metadata(form_id, probe_id, &url, Err(message.clone()));
+            }
+            self.state.message = Some(message);
         }
     }
 
@@ -283,7 +293,7 @@ impl App {
 
             Action::Restart(id) => self.command(Command::Restart { id }),
 
-            Action::Settings => self.state.settings_open = true,
+            Action::Settings => self.state.show_settings(),
 
             Action::Scheduler => self.state.scheduler_open = true,
 
@@ -315,24 +325,13 @@ impl App {
                     }
                 }
 
-                Event::Metadata { url, result } => {
-                    if self.state.add.probe_url == url {
-                        self.state.add.probing = false;
-
-                        if self.state.add.url.trim() == url {
-                            match result {
-                                Ok(metadata) => {
-                                    if self.state.add.filename.is_empty() {
-                                        self.state.add.filename = metadata.filename.clone();
-                                    }
-
-                                    self.state.add.metadata = Some(metadata);
-                                }
-
-                                Err(error) => self.state.add.error = Some(error),
-                            }
-                        }
-                    }
+                Event::Metadata {
+                    url,
+                    form_id,
+                    probe_id,
+                    result,
+                } => {
+                    self.state.apply_metadata(form_id, probe_id, &url, result);
                 }
             }
         }
@@ -436,7 +435,7 @@ impl App {
         }
 
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma)) {
-            self.state.settings_open = true;
+            self.state.show_settings();
         }
 
         if !self.state.add.open
@@ -515,7 +514,7 @@ impl App {
                 .unwrap_or_default()
                 .as_str()
             {
-                "settings" => self.state.settings_open = true,
+                "settings" => self.state.show_settings(),
 
                 "add" => self.state.show_add(),
 
@@ -636,7 +635,7 @@ impl eframe::App for App {
         }
         if std::mem::take(&mut self.state.choose_preferences_folder) {
             self.request(Request::ChooseFolder {
-                target: ui_state::FolderTarget::Preferences,
+                target: ui_state::FolderTarget::Preferences(self.state.settings_id),
                 initial: self.state.prefs.folder.clone(),
             });
         }

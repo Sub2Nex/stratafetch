@@ -155,9 +155,8 @@ async fn main() -> anyhow::Result<()> {
         Action::Limit {
             id,
             bytes_per_second,
-        } => Command::Configure {
+        } => Command::Limit {
             id,
-            priority: 0,
             bytes_per_second,
         },
     };

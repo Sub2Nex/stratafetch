@@ -19,7 +19,11 @@ pub enum Request {
     Command(Command),
     Sequence(Vec<Command>),
 
-    Probe(String),
+    Probe {
+        url: String,
+        form_id: u64,
+        probe_id: u64,
+    },
     ChooseFolder {
         target: FolderTarget,
         initial: String,
@@ -44,6 +48,8 @@ pub enum Event {
     Message(String),
 
     Metadata {
+        form_id: u64,
+        probe_id: u64,
         url: String,
 
         result: Result<Metadata, String>,
@@ -108,8 +114,8 @@ async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: C
     }
 }
 
-fn emit(events: &mpsc::SyncSender<Event>, ctx: &egui::Context, event: Event) {
-    let _ = events.try_send(event);
+fn emit(events: &mpsc::Sender<Event>, ctx: &egui::Context, event: Event) {
+    let _ = events.send(event);
 
     ctx.request_repaint();
 }
@@ -118,7 +124,7 @@ impl Worker {
     pub fn new(ctx: egui::Context) -> Self {
         let (commands, mut requests) = tokio::sync::mpsc::channel(64);
 
-        let (events, receiver) = mpsc::sync_channel(64);
+        let (events, receiver) = mpsc::channel();
 
         let latest = Arc::new(Mutex::new(None));
 
@@ -211,7 +217,10 @@ impl Worker {
                 };
 
                 while let Some(request) = requests.recv().await {
-                    if !matches!(request, Request::Probe(_) | Request::ChooseFolder { .. }) {
+                    if !matches!(
+                        request,
+                        Request::Probe { .. } | Request::ChooseFolder { .. }
+                    ) {
                         snapshots.1.fetch_add(1, Ordering::SeqCst);
                     }
                     let reply = match request {
@@ -238,7 +247,11 @@ impl Worker {
                             });
                             continue;
                         }
-                        Request::Probe(url) => {
+                        Request::Probe {
+                            url,
+                            form_id,
+                            probe_id,
+                        } => {
                             let events = events.clone();
 
                             let ctx = ctx.clone();
@@ -248,7 +261,16 @@ impl Worker {
                                     .await
                                     .map_err(|e| format!("{e:#}"));
 
-                                emit(&events, &ctx, Event::Metadata { url, result });
+                                emit(
+                                    &events,
+                                    &ctx,
+                                    Event::Metadata {
+                                        url,
+                                        form_id,
+                                        probe_id,
+                                        result,
+                                    },
+                                );
                             });
 
                             continue;
@@ -376,5 +398,22 @@ impl Worker {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn accepted_events_are_not_lost_when_a_batch_fills_the_queue() {
+        let (events, receiver) = mpsc::channel();
+        let ctx = egui::Context::default();
+        for index in 0..65 {
+            emit(&events, &ctx, Event::Message(format!("{index}")));
+        }
+        assert_eq!(
+            receiver.try_iter().count(),
+            65,
+            "a metadata or folder result must not disappear after a batch"
+        );
     }
 }

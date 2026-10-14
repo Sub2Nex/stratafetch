@@ -9,7 +9,9 @@ chrome.contextMenus.onClicked.addListener(async info => {
   } catch { await showResult(false, "StrataFetch is unavailable. Start the app and register the native host."); }
 });
 async function showResult(ok, message) {
-  await chrome.action.setBadgeText({ text: ok ? "+" : "!" });
-  await chrome.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" });
-  await chrome.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` });
+  await Promise.allSettled([
+    chrome.action.setBadgeText({ text: ok ? "+" : "!" }),
+    chrome.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" }),
+    chrome.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` }),
+  ]);
 }

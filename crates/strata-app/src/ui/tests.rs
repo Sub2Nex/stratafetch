@@ -119,3 +119,49 @@ fn transfer_window_and_settings_footer_are_visible() {
         }
     }
 }
+#[test]
+fn single_stream_transfers_do_not_claim_verified_resume() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager =
+        strata_core::Manager::open(&dir.path().join("state"), Default::default()).unwrap();
+    let mut job = manager
+        .add("https://example.org/file", dir.path(), None)
+        .unwrap();
+    job.validator = Some("\"etag-without-ranges\"".into());
+    job.size = Some(100);
+    job.downloaded = 50;
+    let ctx = egui::Context::default();
+    let mut state = State::new(Default::default());
+    state.transfer = Some(job.id.clone());
+    for frame in 0..3 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(frame as f64),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1280.0, 720.0),
+                )),
+                ..Default::default()
+            },
+            |root| {
+                egui::CentralPanel::default().show(root, |_| {});
+                transfer_dialog::show(root.ctx(), &mut state, std::slice::from_ref(&job), |_| None);
+            },
+        );
+        output.textures_delta.clear();
+        if frame == 2 {
+            assert!(
+                output
+                    .shapes
+                    .iter()
+                    .any(|shape| has_text(&shape.shape, "Restart required if interrupted"))
+            );
+            assert!(
+                !output
+                    .shapes
+                    .iter()
+                    .any(|shape| has_text(&shape.shape, "Validated byte ranges"))
+            );
+        }
+    }
+}

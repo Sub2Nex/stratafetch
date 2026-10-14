@@ -50,6 +50,7 @@ ui.add(egui::TextEdit::singleline(&mut state.add.url).desired_width(f32::INFINIT
         if state.add.focus_url { response.request_focus(); state.add.focus_url=false; }
         if response.changed(){
 state.add.probing=false;
+state.add.probe_id = state.add.probe_id.wrapping_add(1);
 state.add.probe_url.clear();
 state.add.metadata=None;
 state.add.filename.clear();
@@ -74,7 +75,8 @@ else{
 )).clicked(){
 state.add.probing=true;
 state.add.probe_url=state.add.url.trim().to_owned();
-requests.push(Request::Probe(state.add.probe_url.clone()));
+state.add.probe_id = state.add.probe_id.wrapping_add(1);
+requests.push(Request::Probe { url: state.add.probe_url.clone(), form_id: state.add.form_id, probe_id: state.add.probe_id });
 }
 }
 );
@@ -87,7 +89,7 @@ ui.add(egui::TextEdit::singleline(&mut state.add.filename).desired_width(f32::IN
         ui.label("Destination directory");
 ui.add(egui::TextEdit::singleline(&mut state.add.folder).desired_width(f32::INFINITY));
 if ui.button("Choose folder…").clicked() {
-    requests.push(Request::ChooseFolder { target: FolderTarget::Add, initial: state.add.folder.clone() });
+    requests.push(Request::ChooseFolder { target: FolderTarget::Add(state.add.form_id), initial: state.add.folder.clone() });
 }
 
         ui.horizontal(|ui| {

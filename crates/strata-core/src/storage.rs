@@ -77,21 +77,68 @@ pub(crate) fn recover_published(job: &mut Job) -> Result<bool> {
     Ok(true)
 }
 
+fn private_file(path: &Path) -> Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).read(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: inspect the entry, rather than its target.
+        options.custom_flags(0x00200000);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    anyhow::ensure!(
+        metadata.is_file(),
+        "State must be a regular file: {}",
+        path.display()
+    );
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        anyhow::ensure!(
+            metadata.file_attributes() & 0x400 == 0,
+            "State reparse points are not supported"
+        );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(file)
+}
 pub struct Store {
     connection: Connection,
     _lock: File,
 }
 impl Store {
     pub fn open(directory: &Path) -> Result<Self> {
-        let lock = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(directory.join("engine.lockfile"))?;
+        let lock = private_file(&directory.join("engine.lockfile"))?;
         lock.try_lock_exclusive()
             .context("StrataFetch is already running with this state directory")?;
-        let connection = Connection::open(directory.join("state.sqlite"))?;
+        let database = directory.join("state.sqlite");
+        // SQLite sidecars inherit database permissions. Tighten existing sidecars
+        // too, and refuse links before opening a profile through SQLite's VFS.
+        let _database_file = private_file(&database)?;
+        for name in ["state.sqlite-wal", "state.sqlite-shm"] {
+            let path = directory.join(name);
+            match std::fs::symlink_metadata(&path) {
+                Ok(_) => {
+                    private_file(&path)?;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let connection = Connection::open(database)?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         anyhow::ensure!(
             version <= 2,

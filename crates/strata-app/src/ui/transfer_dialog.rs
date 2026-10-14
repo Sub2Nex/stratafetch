@@ -84,7 +84,7 @@ eta(job).map(duration).unwrap_or_else(||"—".into())),
 ("Connections",
 job.connections.to_string()),
 ("Resume",
-if job.validator.is_some()&&job.size.is_some(){
+if job.resumable {
 "Validated byte ranges"}
 else if job.downloaded>0 {
 "Restart required if interrupted"}
@@ -116,15 +116,15 @@ ui.label(description);
 ,
 
             1=> {
-ui.label("Verified range segments");
+ui.label(if job.resumable {"Verified range segments"} else {"Single-stream transfer"});
 for (index,
 segment) in job.segments.iter().enumerate(){
-let length=segment.end.saturating_sub(segment.start).saturating_add(1);
+let length=if job.resumable {segment.end.saturating_sub(segment.start).saturating_add(1)} else {job.size.unwrap_or(job.downloaded)};
 ui.label(format!("Connection {} · {} – {}",
 index+1,
 bytes(segment.start as f64),
 bytes(segment.end as f64)));
-ui.add(egui::ProgressBar::new(segment.done as f32/length.max(1) as f32).desired_width(ui.available_width()).text(format!("{} / {}",
+ui.add(egui::ProgressBar::new((segment.done as f32/length.max(1) as f32).clamp(0.0,1.0)).desired_width(ui.available_width()).text(format!("{} / {}",
 bytes(segment.done as f64),
 bytes(length as f64))));
 }

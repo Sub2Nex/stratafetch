@@ -48,6 +48,8 @@ pub struct Job {
     pub speed: f64,
     pub connections: usize,
     pub validator: Option<String>,
+    #[serde(default)]
+    pub resumable: bool,
     pub segments: Vec<Segment>,
     pub error: Option<String>,
     pub sha256: Option<String>,
@@ -104,10 +106,17 @@ impl Default for Settings {
     }
 }
 
+pub(crate) struct TransferControl {
+    cancel: watch::Sender<bool>,
+    resume_requested: bool,
+}
+
+pub const MAX_URL_BYTES: usize = 16 * 1024;
+
 pub(crate) struct Inner {
     pub jobs: Mutex<HashMap<String, Job>>,
     pub store: Mutex<storage::Store>,
-    pub controls: Mutex<HashMap<String, watch::Sender<bool>>>,
+    pub controls: Mutex<HashMap<String, TransferControl>>,
     pub settings: Mutex<Settings>,
     pub bandwidth: tokio::sync::Mutex<()>,
     pub dispatcher_running: AtomicBool,
@@ -123,6 +132,15 @@ pub struct Manager(pub(crate) Arc<Inner>);
 impl Manager {
     /// Opens persistent state, with an exclusive process lock. Interrupted work is paused.
     pub fn open(directory: &Path, options: Options) -> Result<Self> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(directory)?;
+        }
+        #[cfg(not(unix))]
         std::fs::create_dir_all(directory)?;
         let store = storage::Store::open(directory)?;
         let settings = store.settings()?.unwrap_or(Settings {
@@ -226,6 +244,10 @@ impl Manager {
     pub fn add(&self, raw: &str, directory: &Path, name: Option<&str>) -> Result<Job> {
         // Serialize destination reservations and sequence assignment across IPC clients.
         let _controls = self.0.controls.lock().unwrap();
+        anyhow::ensure!(
+            raw.trim().len() <= MAX_URL_BYTES,
+            "URL exceeds 16 KiB limit"
+        );
         let url = url::Url::parse(raw.trim()).context("Enter a valid HTTP or HTTPS URL")?;
         if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
             bail!("Only HTTP and HTTPS URLs are supported");
@@ -235,12 +257,10 @@ impl Manager {
         }
         std::fs::create_dir_all(directory)?;
         let mut directory = directory.canonicalize()?;
-        let filename = sanitize_filename(name.unwrap_or_else(|| {
-            url.path_segments()
-                .and_then(|mut s| s.next_back())
-                .filter(|s| !s.is_empty())
-                .unwrap_or("download")
-        }));
+        let filename = match name {
+            Some(name) => sanitize_filename(name),
+            None => metadata::identity(raw)?.filename,
+        };
         let category = category_for(&filename).to_owned();
         if self.settings().organize_by_extension {
             directory = directory.join(&category);
@@ -273,6 +293,7 @@ impl Manager {
             speed: 0.0,
             connections: 0,
             validator: None,
+            resumable: false,
             segments: vec![],
             error: None,
             sha256: None,
@@ -297,9 +318,15 @@ impl Manager {
     /// Starts a cooperative transfer on the current Tokio runtime.
     pub fn start(&self, id: &str) -> Result<()> {
         let mut controls = self.0.controls.lock().unwrap();
-        if controls.contains_key(id) {
+        if let Some(control) = controls.get_mut(id) {
+            if *control.cancel.borrow() {
+                control.resume_requested = true;
+            }
             return Ok(());
         }
+        self.enqueue(id, &mut controls)
+    }
+    fn enqueue(&self, id: &str, controls: &mut HashMap<String, TransferControl>) -> Result<()> {
         let mut job = self.get(id)?;
         if job.status == Status::Completed {
             bail!("Download already completed");
@@ -308,7 +335,13 @@ impl Manager {
         job.error = None;
         self.update(job)?;
         let (tx, _) = watch::channel(false);
-        controls.insert(id.to_owned(), tx);
+        controls.insert(
+            id.to_owned(),
+            TransferControl {
+                cancel: tx,
+                resume_requested: false,
+            },
+        );
         // Serialize dispatcher lifetime with queue mutations to avoid lost admissions.
         if !self.0.dispatcher_running.swap(true, Ordering::SeqCst) {
             let manager = self.clone();
@@ -356,7 +389,7 @@ impl Manager {
                         controls.remove(&id);
                         continue;
                     }
-                    let rx = controls.get(&id).unwrap().subscribe();
+                    let rx = controls.get(&id).unwrap().cancel.subscribe();
                     let manager = self.clone();
                     tokio::spawn(async move {
                         let outcome = network::run(&manager, &id, rx).await;
@@ -375,8 +408,13 @@ impl Manager {
                                 eprintln!("Cannot persist final state: {error}");
                             }
                         }
-                        controls.remove(&id);
+                        let resume = controls
+                            .remove(&id)
+                            .is_some_and(|control| control.resume_requested);
                         manager.0.meter.lock().unwrap().remove(&id);
+                        if resume && let Err(error) = manager.enqueue(&id, &mut controls) {
+                            eprintln!("Cannot resume download: {error:#}");
+                        }
                         manager.0.queue_changed.notify_one();
                     });
                 }
@@ -404,8 +442,9 @@ impl Manager {
         job.status = status;
         job.speed = 0.0;
         self.update(job)?;
-        if let Some(control) = controls.get(id) {
-            let _ = control.send(true);
+        if let Some(control) = controls.get_mut(id) {
+            control.resume_requested = false;
+            let _ = control.cancel.send(true);
         }
         if queued {
             controls.remove(id);
@@ -429,6 +468,9 @@ impl Manager {
         job.downloaded = 0;
         job.segments.clear();
         job.validator = None;
+        job.resumable = false;
+        job.sha256 = None;
+        job.completed = None;
         job.size = None;
         job.status = Status::Paused;
         self.update(job)?;
@@ -495,6 +537,17 @@ impl Manager {
         job.bytes_per_second = bytes_per_second;
         self.update(job)
     }
+    /// Changes the rate without silently changing queue priority.
+    pub fn limit(&self, id: &str, bytes_per_second: u64) -> Result<()> {
+        let controls = self.0.controls.lock().unwrap();
+        anyhow::ensure!(
+            !controls.contains_key(id),
+            "Pause before changing transfer settings"
+        );
+        let mut job = self.get(id)?;
+        job.bytes_per_second = bytes_per_second;
+        self.update(job)
+    }
     /// Changes classification and a UTC Unix start time without moving partial data.
     pub fn schedule(&self, id: &str, category: &str, scheduled_at: Option<u64>) -> Result<()> {
         let controls = self.0.controls.lock().unwrap();
@@ -541,20 +594,40 @@ pub fn sanitize_filename(raw: &str) -> String {
                 c
             }
         })
-        .take(180)
         .collect();
     name = name.trim_matches([' ', '.']).to_owned();
-    let stem = name.split('.').next().unwrap_or("").to_uppercase();
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(' ')
+        .to_uppercase();
     if name.is_empty()
         || [
-            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-            "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+            "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "COM1", "COM2", "COM3", "COM4",
+            "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6",
+            "LPT7", "LPT8", "LPT9", "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³",
         ]
         .contains(&stem.as_str())
     {
         name = format!("download_{name}");
     }
-    name
+    // Leave room for collision prefixes on byte-limited filesystems, preserving
+    // short extensions and truncating only at a valid UTF-8 character boundary.
+    if name.len() > 180 {
+        let suffix = name
+            .rsplit_once('.')
+            .filter(|(_, ext)| !ext.is_empty() && ext.len() <= 20)
+            .map(|(_, ext)| format!(".{ext}"))
+            .unwrap_or_default();
+        let mut end = 180 - suffix.len();
+        while !name.is_char_boundary(end) {
+            end -= 1;
+        }
+        name.truncate(end);
+        name.push_str(&suffix);
+    }
+    name.trim_end_matches([' ', '.']).to_owned()
 }
 pub(crate) fn staging_path(job: &Job) -> PathBuf {
     job.destination

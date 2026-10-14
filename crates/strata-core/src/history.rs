@@ -22,6 +22,8 @@ struct History {
     version: u32,
     entries: Vec<Entry>,
 }
+const MAX_ENTRIES: usize = 10_000;
+
 impl Manager {
     /// Creates a new file; existing exports are preserved. URLs may contain private query tokens.
     pub fn export_history(&self, path: &Path) -> Result<()> {
@@ -30,17 +32,21 @@ impl Manager {
             .into_iter()
             .map(|job| Entry {
                 url: job.url,
-                filename: job
-                    .destination
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned(),
-                category: job.category,
+                filename: sanitize_filename(
+                    &job.destination
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                ),
+                category: sanitize_filename(&job.category),
                 priority: job.priority,
                 bytes_per_second: job.bytes_per_second,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        ensure!(
+            entries.len() <= MAX_ENTRIES,
+            "Export limited to {MAX_ENTRIES} entries"
+        );
         let bytes = serde_json::to_vec_pretty(&History {
             version: 1,
             entries,
@@ -49,12 +55,14 @@ impl Manager {
             bytes.len() <= 8 * 1024 * 1024,
             "Export exceeds 8 MiB history limit"
         );
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)?;
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
         file.write_all(&bytes)?;
-        file.sync_all()?;
+        file.as_file().sync_all()?;
+        file.persist_noclobber(path).map_err(|error| error.error)?;
         Ok(())
     }
     /// Recreates paused download recipes in an explicit directory with new IDs and no partial data.
@@ -71,10 +79,11 @@ impl Manager {
         let history: History = serde_json::from_slice(&bytes)?;
         ensure!(history.version == 1, "Unsupported history version");
         ensure!(
-            history.entries.len() <= 1000,
-            "Import limited to 1000 entries"
+            history.entries.len() <= MAX_ENTRIES,
+            "Import limited to {MAX_ENTRIES} entries"
         );
         for entry in &history.entries {
+            crate::metadata::identity(&entry.url)?;
             let url = url::Url::parse(&entry.url)?;
             ensure!(
                 matches!(url.scheme(), "http" | "https")

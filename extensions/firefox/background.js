@@ -9,7 +9,9 @@ browser.contextMenus.onClicked.addListener(async info => {
   } catch { await showResult(false, "StrataFetch is unavailable. Start the app and register the native host."); }
 });
 async function showResult(ok, message) {
-  await browser.action.setBadgeText({ text: ok ? "+" : "!" });
-  await browser.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" });
-  await browser.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` });
+  await Promise.allSettled([
+    browser.action.setBadgeText({ text: ok ? "+" : "!" }),
+    browser.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" }),
+    browser.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` }),
+  ]);
 }

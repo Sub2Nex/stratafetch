@@ -61,3 +61,34 @@ for (const [folder, namespace] of [['chromium', 'chrome'], ['firefox', 'browser'
     });
   }
 }
+for (const [folder, namespace] of [['chromium', 'chrome'], ['firefox', 'browser']]) {
+  test(`${folder}: late startup ping preserves the current-tab error`, async () => {
+    const elements = Object.fromEntries(['status', 'send', 'current', 'url'].map(id => [id, { value: 'previous URL' }]));
+    let resolvePing;
+    const api = {
+      runtime: { sendNativeMessage() { return new Promise(resolve => { resolvePing = resolve; }); } },
+      tabs: { async query() { throw new Error('Tab access denied'); } },
+    };
+    runInNewContext(readFileSync(new URL(`../extensions/${folder}/popup.js`, import.meta.url), 'utf8'), {
+      [namespace]: api, document: { getElementById(id) { return elements[id]; } },
+    });
+    await elements.current.onclick();
+    const error = elements.status.textContent;
+    resolvePing({ ok: true, active: 0 });
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(elements.status.textContent, error);
+    assert.match(error, /cannot read/i);
+  });
+  test(`${folder}: badge API errors do not become unhandled handoff failures`, async () => {
+    let clicked;
+    let nativeCalls = 0;
+    const api = {
+      runtime: { onInstalled: { addListener() {} }, async sendNativeMessage() { nativeCalls++; return { ok: true }; } },
+      contextMenus: { onClicked: { addListener(fn) { clicked = fn; } } },
+      action: { async setBadgeText() { throw new Error('Action unavailable'); }, async setBadgeBackgroundColor() {}, async setTitle() {} },
+    };
+    runInNewContext(readFileSync(new URL(`../extensions/${folder}/background.js`, import.meta.url), 'utf8'), { [namespace]: api });
+    await assert.doesNotReject(clicked({ menuItemId: 'stratafetch', linkUrl: 'https://example.org/file' }));
+    assert.equal(nativeCalls, 1);
+  });
+}

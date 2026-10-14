@@ -7,6 +7,10 @@ pub struct Metadata {
     pub size: Option<u64>,
 }
 pub fn identity(raw: &str) -> Result<Metadata> {
+    ensure!(
+        raw.trim().len() <= crate::MAX_URL_BYTES,
+        "URL exceeds 16 KiB limit"
+    );
     let url = url::Url::parse(raw.trim())?;
     ensure!(
         matches!(url.scheme(), "http" | "https") && url.host_str().is_some(),

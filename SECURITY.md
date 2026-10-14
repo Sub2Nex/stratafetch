@@ -8,4 +8,4 @@ The local OS account and destination directory owner are trusted. A process runn
 
 Browser integration has no cookie or history collection. Native origins must be registered explicitly. Downloaded executables are untrusted and never automatically launched. An explicit Open File action delegates to the OS.
 
-CI includes cargo-audit and cargo-deny checks. Dependency audit results are recorded in verification notes; configuring a check does not mean it has passed. Before stable release, resolve all applicable audit findings, verify platform access controls, and expand fault-injection testing.
+Local release validation includes cargo-audit and cargo-deny checks; hosted CI remains disabled. Dependency audit results are recorded in verification notes; configuring a check does not mean it has passed. Before stable release, resolve all applicable audit findings, verify platform access controls, and expand fault-injection testing.

@@ -83,6 +83,10 @@ pub enum Command {
     Remove {
         id: String,
     },
+    Limit {
+        id: String,
+        bytes_per_second: u64,
+    },
     Configure {
         id: String,
         priority: i32,
@@ -114,7 +118,8 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
         | Command::Cancel { id }
         | Command::Restart { id }
         | Command::Remove { id }
-        | Command::Configure { id, .. } => Some(id.clone()),
+        | Command::Configure { id, .. }
+        | Command::Limit { id, .. } => Some(id.clone()),
         Command::Schedule { id, .. } => Some(id.clone()),
         _ => None,
     };
@@ -177,6 +182,10 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
             Command::Cancel { id } => manager.cancel(&id)?,
             Command::Restart { id } => manager.restart(&id)?,
             Command::Remove { id } => manager.remove(&id)?,
+            Command::Limit {
+                id,
+                bytes_per_second,
+            } => manager.limit(&id, bytes_per_second)?,
             Command::Configure {
                 id,
                 priority,

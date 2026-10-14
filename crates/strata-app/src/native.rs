@@ -11,7 +11,12 @@ pub struct Message {
 }
 pub fn read_message(input: &mut impl Read) -> Result<Option<Message>> {
     let mut prefix = [0u8; 4];
-    let first = input.read(&mut prefix[..1])?;
+    let first = loop {
+        match input.read(&mut prefix[..1]) {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => break result?,
+        }
+    };
     if first == 0 {
         return Ok(None);
     }
@@ -52,5 +57,33 @@ mod tests {
         )
         .unwrap();
         assert!(read_message(&mut std::io::Cursor::new(bytes)).is_err());
+    }
+}
+#[cfg(test)]
+mod interrupted_reads {
+    use super::*;
+    struct Reader {
+        first: bool,
+        bytes: std::io::Cursor<Vec<u8>>,
+    }
+    impl Read for Reader {
+        fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+            if self.first {
+                self.first = false;
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            self.bytes.read(bytes)
+        }
+    }
+    #[test]
+    fn interrupted_prefix_reads_preserve_the_native_connection() {
+        let mut bytes = vec![];
+        write_message(&mut bytes, &serde_json::json!({"action":"ping"})).unwrap();
+        let mut input = Reader {
+            first: true,
+            bytes: std::io::Cursor::new(bytes),
+        };
+        assert_eq!(read_message(&mut input).unwrap().unwrap().action, "ping");
+        assert!(read_message(&mut input).unwrap().is_none());
     }
 }

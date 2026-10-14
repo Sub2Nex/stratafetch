@@ -1,31 +1,33 @@
-# StrataFetch v0.1.0-alpha.4 — native platform integration
+# StrataFetch v0.1.0-beta.1 — first public testing beta
 
-Experimental desktop prerelease with download metadata fixes, Unix integration and a directly downloadable Windows desktop executable. Stable release acceptance remains open. Validation and builds are local; no GitHub Actions, paid runners or signing services are used.
+Beta for the download engine and Linux desktop, with an unsigned Windows x64 cross-build preview. This release fixes 18 reproduced alpha.4 defects and upgrades Rustls for four newly published security advisories. Stable and full platform acceptance remain open. All validation and packaging are local; GitHub Actions and hosted runners remain disabled.
 
-## Changes
+## Fixes
 
-- Fix quoted Content-Disposition filenames, UTF-8 language-tag parameters and invalid UTF-8 fallback.
-- Handle unavailable browser-tab URLs without unhandled errors or stale download URLs.
-- Add per-user Linux application-menu/icon installation and ownership-safe removal.
-- Register Chrome, Chromium, Edge and Firefox native hosts on Linux/macOS, preserving other installations and history.
-- Use private same-user Unix IPC sockets that handle long state paths, stale sockets and normal shutdown cleanup.
-- Add native destination folder dialogs, macOS Command shortcuts, accessibility adapters and high-DPI vector icons.
-- Prepare native macOS .app bundles; Mac builds and runtime acceptance remain pending.
-- Package a standalone Windows desktop .exe alongside the full ZIP and verify artifact checksums.
+- Preserve an immediate Resume after Pause, retain queue priority when setting a CLI rate limit, and cancel pending resume requests when paused again.
+- Decode CLI/browser URL filenames; bound Unicode names by bytes; preserve short extensions; escape additional Windows device aliases.
+- Retry transient initial HTTP probes and interrupt retry/hash waits when paused.
+- Reject oversized URLs before creating records that exceed IPC limits.
+- Make exported histories importable above 1,000 entries with a shared 10,000-entry/8 MiB limit; normalize Unicode labels; publish private exports without overwriting files.
+- Restrict Unix database/sidecar permissions and refuse database symlink aliases that bypass profile locking.
+- Preserve native messaging through interrupted reads and deliver worker events without dropping metadata/folder results.
+- Prevent late browser replies from replacing current errors, and handle action-badge failures without losing native handoff results.
+- Show actual single-stream resumability/progress and ignore stale native chooser/metadata results from old forms.
+- Upgrade Rustls to 0.23.46 for RUSTSEC-2026-0346, 0347, 0348 and 0349.
 
 ## Downloads
 
-- **stratafetch-desktop.exe**: standalone Windows x64 desktop preview, built with the GNU Windows toolchain from Linux. It is portable, not an installer. This new Windows build has not been executed on Windows; retain alpha status and report failures.
-- **stratafetch-windows-x64.zip**: matching desktop, CLI and native browser-host executables, extensions, documentation and dependency notices. Upgrade all three executables together. Binaries are unsigned.
-- **stratafetch-linux-x64.tar.gz**: locally verified Debian 13 x64 desktop/CLI/native-host build, with X11 and Wayland support. The desktop references GLIBC_2.39; older distributions require a native rebuild.
-- **SHA256SUMS**: SHA-256 for every binary/archive asset above.
+- **stratafetch-desktop.exe**: standalone Windows x64 desktop preview. Portable, not an installer.
+- **stratafetch-windows-x64.zip**: matching Windows desktop, CLI, native host, extensions, documentation and dependency notices. GNU cross-compiled on Linux; not executed on Windows.
+- **stratafetch-linux-x64.tar.gz**: verified Debian 13 x64 desktop/CLI/native-host package. Requires GLIBC_2.39 and an X11/Wayland session with a supported Vulkan driver.
+- **SHA256SUMS**: hashes for all executable/archive assets above.
 
-No installer, macOS binary or Linux ARM64 binary is included. macOS packaging is present in the source, but an Apple compiler/SDK and native validation are required before shipping Mac binaries.
+No macOS/ARM64 binary or installer is included. macOS source integration and app packaging are prepared; native build/runtime acceptance requires Apple's SDK. Binaries are unsigned.
 
-## Validation and remaining checks
+## Evidence and limits
 
-The alpha.4 Linux source/build passed all 60 Rust tests, 14 mocked browser-extension tests, formatting and strict all-target Clippy. The real Unix CLI/native-host service smoke check downloads from a local range-capable server and independently checks all bytes and SHA-256. Linux native rendering was exercised with X11 and Wayland using software Vulkan; this does not certify physical GPUs or distribution desktop sessions.
+All 79 Rust tests and 18 browser-script checks pass, including the new regressions. Formatting, strict Clippy, dependency advisories/licenses/sources, release CLI/native-host exact-byte/SHA-256 downloads and rejection of an untrusted HTTPS certificate pass. Native Linux rendering is validated with X11 and Wayland using software Vulkan. Archive executable bytes, source metadata and uploaded asset hashes are verified before publication.
 
-Windows executables are cross-compiled with checksum/package and PE import inspection. That is build evidence, not Windows runtime acceptance. Native Windows regression tests, installed-browser integration, Mac Intel/Apple Silicon builds, DPI/monitor transitions, accessibility clients, sleep/resume and full folder-selection acceptance remain pending. The cloud portal denied process-root inspection; its GTK fallback displayed a chooser, but the automated expected-directory assertion did not pass. See docs/PLATFORMS.md for precise evidence and limitations.
+Installed Chromium testing was blocked by this environment's administrator policy forbidding unpacked extensions. That failed attempt is documented, not counted as acceptance. Browser integration remains experimental. Native Windows/Mac execution, physical GPUs, installed browsers, full folder-selection acceptance, accessibility/DPI transitions, sleep/resume, signing and different-user Windows IPC checks remain pending. See [the beta audit](https://github.com/Sub2Nex/stratafetch/blob/v0.1.0-beta.1/docs/BETA-AUDIT.md) for every fix, regression and limitation.
 
-Default history remains outside the installation directory and schema 2 is preserved. Back up state before upgrading and unregister/re-register browser hosts if their permanent path changes. Completed files are not automatically executed. History exports may contain private URL query parameters. Unsigned binaries do not establish trusted publisher signing or notarization.
+Back up profiles and close old desktop/service instances before upgrading all three executables together. Schema 2 is preserved; interrupted jobs remain paused. Re-register the native host if its permanent path changes. Completed files are never automatically executed. Exports contain URLs and may contain private query parameters.

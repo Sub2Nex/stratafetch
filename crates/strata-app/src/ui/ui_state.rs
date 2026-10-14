@@ -298,6 +298,8 @@ impl Selection {
 
 #[derive(Default)]
 pub struct AddDialog {
+    pub form_id: u64,
+    pub probe_id: u64,
     pub open: bool,
     pub focus_url: bool,
 
@@ -336,8 +338,8 @@ pub struct TransferDraft {
 
 #[derive(Clone, Copy)]
 pub enum FolderTarget {
-    Add,
-    Preferences,
+    Add(u64),
+    Preferences(u64),
 }
 
 pub struct State {
@@ -370,6 +372,7 @@ pub struct State {
     pub draft: Option<TransferDraft>,
 
     pub settings_open: bool,
+    pub settings_id: u64,
     pub choose_preferences_folder: bool,
 
     pub settings_page: usize,
@@ -393,8 +396,14 @@ impl State {
     /// Ignore a late native-dialog result after closing the form or editing its path.
     pub fn apply_folder(&mut self, target: FolderTarget, initial: &str, path: std::path::PathBuf) {
         let (open, field) = match target {
-            FolderTarget::Add => (self.add.open, &mut self.add.folder),
-            FolderTarget::Preferences => (self.settings_open, &mut self.prefs.folder),
+            FolderTarget::Add(id) => (
+                self.add.open && id == self.add.form_id,
+                &mut self.add.folder,
+            ),
+            FolderTarget::Preferences(id) => (
+                self.settings_open && id == self.settings_id,
+                &mut self.prefs.folder,
+            ),
         };
         if open && field == initial {
             if let Some(path) = path.to_str() {
@@ -440,6 +449,7 @@ impl State {
             draft: None,
 
             settings_open: false,
+            settings_id: 0,
             choose_preferences_folder: false,
 
             settings_page: 0,
@@ -465,6 +475,7 @@ impl State {
 
     pub fn show_add(&mut self) {
         self.add = AddDialog {
+            form_id: self.add.form_id.wrapping_add(1),
             open: true,
             focus_url: true,
 
@@ -474,6 +485,39 @@ impl State {
         };
     }
 
+    pub fn show_settings(&mut self) {
+        if !self.settings_open {
+            self.settings_id = self.settings_id.wrapping_add(1);
+        }
+        self.settings_open = true;
+    }
+    pub fn apply_metadata(
+        &mut self,
+        form_id: u64,
+        probe_id: u64,
+        url: &str,
+        result: Result<strata_core::metadata::Metadata, String>,
+    ) {
+        if !self.add.open
+            || self.add.form_id != form_id
+            || self.add.probe_id != probe_id
+            || self.add.probe_url != url
+        {
+            return;
+        }
+        self.add.probing = false;
+        if self.add.url.trim() == url {
+            match result {
+                Ok(metadata) => {
+                    if self.add.filename.is_empty() {
+                        self.add.filename = metadata.filename.clone();
+                    }
+                    self.add.metadata = Some(metadata);
+                }
+                Err(error) => self.add.error = Some(error),
+            }
+        }
+    }
     pub fn table_keyboard(&self, ctx: &egui::Context) -> bool {
         !self.search_focused
             && !self.add.open
@@ -640,23 +684,23 @@ mod tests {
         let mut state = State::new(Default::default());
         state.add.open = true;
         state.add.folder = "original".into();
-        state.apply_folder(FolderTarget::Add, "original", "selected".into());
+        state.apply_folder(FolderTarget::Add(0), "original", "selected".into());
         assert_eq!(state.add.folder, "selected");
         state.add.folder = "typed manually".into();
-        state.apply_folder(FolderTarget::Add, "original", "stale".into());
+        state.apply_folder(FolderTarget::Add(0), "original", "stale".into());
         assert_eq!(state.add.folder, "typed manually");
         state.settings_open = false;
         state.prefs.folder = "original".into();
-        state.apply_folder(FolderTarget::Preferences, "original", "stale".into());
+        state.apply_folder(FolderTarget::Preferences(0), "original", "stale".into());
         assert_eq!(state.prefs.folder, "original");
         state.settings_open = true;
-        state.apply_folder(FolderTarget::Preferences, "original", "selected".into());
+        state.apply_folder(FolderTarget::Preferences(0), "original", "selected".into());
         assert_eq!(state.prefs.folder, "selected");
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStringExt;
             let path = std::ffi::OsString::from_vec(b"/tmp/non-utf8-\xff".to_vec());
-            state.apply_folder(FolderTarget::Preferences, "selected", path.into());
+            state.apply_folder(FolderTarget::Preferences(0), "selected", path.into());
             assert_eq!(state.prefs.folder, "selected");
             assert!(state.message.as_ref().unwrap().contains("UTF-8"));
         }
@@ -707,5 +751,60 @@ mod tests {
         s.all(&["visible"]);
 
         assert_eq!(s.ids, HashSet::from(["visible".into()]));
+    }
+}
+#[cfg(test)]
+mod reopened_forms {
+    use super::*;
+    #[test]
+    fn old_chooser_results_do_not_change_a_reopened_add_form() {
+        let mut state = State::new(Default::default());
+        state.show_add();
+        let initial = state.add.folder.clone();
+        let target = FolderTarget::Add(state.add.form_id);
+        state.add.open = false;
+        state.show_add();
+        state.apply_folder(target, &initial, "old selection".into());
+        assert_eq!(state.add.folder, initial);
+    }
+}
+#[cfg(test)]
+mod async_result_order {
+    use super::*;
+    #[test]
+    fn stale_metadata_does_not_overwrite_a_newer_probe_or_form() {
+        let mut state = State::new(Default::default());
+        state.show_add();
+        state.add.url = "https://example.org/file".into();
+        state.add.probe_url = state.add.url.clone();
+        state.add.probe_id = 2;
+        state.add.probing = true;
+        let id = state.add.form_id;
+        let metadata = strata_core::metadata::identity(&state.add.url).unwrap();
+        state.apply_metadata(id, 1, "https://example.org/file", Ok(metadata.clone()));
+        assert!(state.add.probing);
+        assert!(state.add.metadata.is_none());
+        state.apply_metadata(id, 2, "https://example.org/file", Ok(metadata.clone()));
+        assert!(!state.add.probing);
+        assert!(state.add.metadata.is_some());
+        state.show_add();
+        state.add.url = "https://example.org/file".into();
+        state.add.probe_url = state.add.url.clone();
+        state.add.probe_id = 2;
+        state.add.probing = true;
+        state.apply_metadata(id, 2, "https://example.org/file", Ok(metadata));
+        assert!(state.add.probing);
+        assert!(state.add.metadata.is_none());
+    }
+    #[test]
+    fn old_chooser_results_do_not_change_reopened_preferences() {
+        let mut state = State::new(Default::default());
+        state.show_settings();
+        let target = FolderTarget::Preferences(state.settings_id);
+        let initial = state.prefs.folder.clone();
+        state.settings_open = false;
+        state.show_settings();
+        state.apply_folder(target, &initial, "old selection".into());
+        assert_eq!(state.prefs.folder, initial);
     }
 }

@@ -1,13 +1,16 @@
 const status = document.getElementById("status");
+let statusRevision = 0;
 async function message(payload) {
+  const revision = ++statusRevision;
   document.getElementById("send").disabled = true;
   try {
     const reply = await chrome.runtime.sendNativeMessage("org.stratafetch.host", payload);
-    status.textContent = reply.ok ? (payload.action === "ping" ? `Connected · ${reply.active ?? 0} active or queued` : `Added: ${reply.download?.filename ?? "download"} (${reply.download?.status ?? "queued"})`) : reply.error;
-  } catch { status.textContent = "StrataFetch is unavailable. Start the app and register the native host."; }
+    if (revision === statusRevision) status.textContent = reply.ok ? (payload.action === "ping" ? `Connected · ${reply.active ?? 0} active or queued` : `Added: ${reply.download?.filename ?? "download"} (${reply.download?.status ?? "queued"})`) : reply.error;
+  } catch { if (revision === statusRevision) status.textContent = "StrataFetch is unavailable. Start the app and register the native host."; }
   finally { document.getElementById("send").disabled = false; }
 }
 document.getElementById("current").onclick = async () => {
+  ++statusRevision;
   const current = document.getElementById("current");
   current.disabled = true;
   try {

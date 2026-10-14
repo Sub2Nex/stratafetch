@@ -102,6 +102,63 @@ async fn request(
         .await
         .map_err(|e| anyhow::anyhow!(e.without_url()))
 }
+fn retry_delay(response: &Response, attempt: usize) -> Result<Duration> {
+    let wait = response
+        .headers()
+        .get(RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value.parse::<u64>().ok().or_else(|| {
+                httpdate::parse_http_date(value).ok().map(|time| {
+                    time.duration_since(std::time::SystemTime::now())
+                        .unwrap_or_default()
+                        .as_secs()
+                })
+            })
+        })
+        .unwrap_or(1 << attempt.min(6));
+    ensure!(
+        wait <= 3600,
+        "Server requires a retry delay longer than one hour; retry later"
+    );
+    Ok(Duration::from_secs(wait))
+}
+async fn probe(
+    manager: &Manager,
+    url: &str,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<Option<Response>> {
+    let mut attempts = 0;
+    loop {
+        let response = tokio::select! {
+            response = manager.0.client.get(url).header(ACCEPT_ENCODING,"identity").header(RANGE,"bytes=0-0").send() => response.map_err(|error| anyhow::anyhow!(error.without_url())),
+            _ = cancelled(cancel) => return Ok(None)
+        };
+        let delay = match response {
+            Ok(response)
+                if response.status().is_server_error()
+                    || response.status() == StatusCode::TOO_MANY_REQUESTS =>
+            {
+                ensure!(
+                    attempts < manager.0.options.retries,
+                    "HTTP {}; probe retry limit reached",
+                    response.status()
+                );
+                attempts += 1;
+                retry_delay(&response, attempts)?
+            }
+            Ok(response) => return Ok(Some(response)),
+            Err(error) => {
+                if attempts >= manager.0.options.retries {
+                    return Err(error);
+                }
+                attempts += 1;
+                backoff(attempts)
+            }
+        };
+        tokio::select! { _ = tokio::time::sleep(delay) => (), _ = cancelled(cancel) => return Ok(None) }
+    }
+}
 async fn cancelled(rx: &mut watch::Receiver<bool>) {
     if *rx.borrow() {
         return;
@@ -166,9 +223,8 @@ pub(crate) async fn run(
         safe_staging_metadata(&meta)?;
     }
     // Probe the actual GET path; HEAD and Accept-Ranges alone are not reliable.
-    let probe = tokio::select! {
-        response = manager.0.client.get(&job.url).header(ACCEPT_ENCODING,"identity").header(RANGE,"bytes=0-0").send() => response.map_err(|e| anyhow::anyhow!(e.without_url()))?,
-        _ = cancelled(&mut cancel) => return Ok(())
+    let Some(probe) = probe(manager, &job.url, &mut cancel).await? else {
+        return Ok(());
     };
     let valid = validator(&probe);
     let range_total = if probe.status() == StatusCode::PARTIAL_CONTENT {
@@ -211,6 +267,7 @@ pub(crate) async fn run(
         None
     };
     let segmented = range_total.is_some() && valid.is_some();
+    job.resumable = segmented;
     if job.downloaded > 0 {
         ensure!(
             segmented && job.validator == valid && job.size == range_total,
@@ -225,7 +282,7 @@ pub(crate) async fn run(
         );
         for segment in &job.segments {
             if segment.done > 0 {
-                let digest = hash_prefix(&stage, segment.start, segment.done).await?;
+                let digest = tokio::select! { digest = hash_prefix(&stage, segment.start, segment.done) => digest?, _ = cancelled(&mut cancel) => return Ok(()) };
                 ensure!(
                     Some(format!("{:x}", digest.finalize())) == segment.sha256,
                     "Partial data checksum changed; restart required"
@@ -335,7 +392,7 @@ pub(crate) async fn run(
     // Compare with hashes accumulated from HTTP bytes, not a fresh checksum alone.
     // A fresh checksum would otherwise bless local damage as the completed file.
     for segment in &finished.segments {
-        let digest = hash_prefix(&stage, segment.start, segment.done).await?;
+        let digest = tokio::select! { digest = hash_prefix(&stage, segment.start, segment.done) => digest?, _ = cancelled(&mut cancel) => return Ok(()) };
         ensure!(
             Some(format!("{:x}", digest.finalize())) == segment.sha256,
             "Staging data checksum changed before completion"
@@ -384,7 +441,8 @@ async fn transfer(
     let mut pending = 0u64;
     let initial = shared.lock().await.clone();
     let segment = &initial.segments[index];
-    let mut digest = hash_prefix(&staging_path(&initial), segment.start, segment.done).await?;
+    let stage = staging_path(&initial);
+    let mut digest = tokio::select! { digest = hash_prefix(&stage, segment.start, segment.done) => digest?, _ = cancelled(&mut cancel) => return Ok(()) };
     if ranged && segment.done == segment.end - segment.start + 1 {
         return Ok(());
     }
@@ -421,25 +479,8 @@ async fn transfer(
                 response.status()
             );
             attempts += 1;
-            let wait = response
-                .headers()
-                .get(RETRY_AFTER)
-                .and_then(|h| h.to_str().ok())
-                .and_then(|h| {
-                    h.parse::<u64>().ok().or_else(|| {
-                        httpdate::parse_http_date(h).ok().map(|time| {
-                            time.duration_since(std::time::SystemTime::now())
-                                .unwrap_or_default()
-                                .as_secs()
-                        })
-                    })
-                })
-                .unwrap_or(1 << attempts.min(6));
-            ensure!(
-                wait <= 3600,
-                "Server requires a retry delay longer than one hour; retry later"
-            );
-            tokio::select! {_=tokio::time::sleep(Duration::from_secs(wait))=>(),_=cancelled(&mut cancel)=>return Ok(())};
+            let delay = retry_delay(&response, attempts)?;
+            tokio::select! {_=tokio::time::sleep(delay)=>(),_=cancelled(&mut cancel)=>return Ok(())};
             continue;
         }
         if ranged {

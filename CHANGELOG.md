@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.1 — 2026-10-14
+
+- Fix 18 reproduced engine, persistence, browser and desktop defects; see docs/BETA-AUDIT.md for regression coverage and scope.
+- Preserve immediate pause/resume intent, CLI queue priority and native messaging through interrupted reads.
+- Bound/decode Unicode filenames, escape Windows device aliases, retry initial probes and reject oversized IPC records before creation.
+- Make history limits symmetric, publish private exports safely, protect Unix database permissions and refuse profile-lock bypass through database symlinks.
+- Deliver worker events reliably and reject stale chooser/probe results; fix browser status races and single-stream resume/progress reporting.
+- Upgrade Rustls to 0.23.46 for four newly published advisories and bump extension manifests to 0.1.1.
+- Ship a Linux x64 public beta and unsigned Windows x64 preview. Native Windows/Mac, installed-browser and stable-release acceptance remain open.
+
 ## 0.1.0-alpha.4 — 2026-10-14
 
 - Add per-user Linux desktop-menu installation, Unix browser-host registration, private same-user IPC with long-path/crash recovery, macOS app bundling and DPI-aware icons.
