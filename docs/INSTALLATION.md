@@ -45,9 +45,9 @@ Download the ZIP and SHA256SUMS from https://github.com/Sub2Nex/stratafetch/rele
 
 This release distributes no installer. The compiled installer still lacks runtime upgrade/uninstall acceptance. Unsigned executables can be rejected by Windows application control; do not change security settings to force them to run.
 
-## v0.1.0-alpha.4 Windows and Linux release
+## v0.1.0-beta.1 Windows and Linux release
 
-Download the standalone Windows desktop `.exe`, full Windows ZIP, Linux x64 archive and shared `SHA256SUMS` from https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.4. Check each downloaded file against that checksum manifest. The Windows binaries are unsigned GNU cross-builds and have not been executed on Windows. The Linux archive was verified on Debian 13 x64 and the desktop requires GLIBC_2.39; older distributions need a native rebuild. No installer or macOS binary is included.
+Download the standalone Windows desktop `.exe`, full Windows ZIP, Linux x64 archive and shared `SHA256SUMS` from https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.1. Check each downloaded file against that checksum manifest. The Windows binaries are unsigned GNU cross-builds and have not been executed on Windows. The Linux archive was verified on Debian 13 x64 and the desktop requires GLIBC_2.39; older distributions need a native rebuild. No installer or macOS binary is included.
 
 Close existing desktop/service processes, back up state and upgrade all three programs together when using the full package. Keep the unpacked installation in a permanent directory before registering browser hosts. On Linux, run `./stratafetch install-desktop` to add the per-user application-menu entry. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for validation and remaining platform checks.
 

@@ -2,7 +2,9 @@
 
 Public source: https://github.com/Sub2Nex/stratafetch.
 
-Published prerelease: [v0.1.0-alpha.4](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.4), built from `d636bb496942d9ae0d2982cbc4058463769da33b`. Assets include the standalone Windows desktop `.exe`, matching Windows ZIP, Linux x64 archive and shared `SHA256SUMS`. Uploaded asset sizes and GitHub SHA-256 digests were compared with the local files before publication. Windows runtime and native macOS acceptance remain pending. Alpha.3 now also offers its original desktop `.exe` extracted unchanged from its checksum-verified ZIP, with `SHA256SUMS-desktop`; its earlier archive and checksums were preserved.
+Published public testing beta: [v0.1.0-beta.1](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.1), source `1e290ca5f8c2fda6c640e381d1c2cabb8e282dcc`. Windows desktop `.exe`, Windows ZIP, Linux x64 archive and SHA256SUMS were uploaded and their GitHub digests/sizes verified before publication. See BETA-AUDIT.md for the fixed bugs, security update and explicit platform limitations.
+
+Historical prerelease: [v0.1.0-alpha.4](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.4), built from `d636bb496942d9ae0d2982cbc4058463769da33b`. Assets include the standalone Windows desktop `.exe`, matching Windows ZIP, Linux x64 archive and shared `SHA256SUMS`. Uploaded asset sizes and GitHub SHA-256 digests were compared with the local files before publication. Windows runtime and native macOS acceptance remain pending. Alpha.3 now also offers its original desktop `.exe` extracted unchanged from its checksum-verified ZIP, with `SHA256SUMS-desktop`; its earlier archive and checksums were preserved.
 
 All validation and packaging run locally. GitHub Actions is disabled and hosted workflows and automated dependency-update configuration are removed by user request. No billing configuration or hosted runner is required. Linux x64 development builds and local native rendering are now exercised; macOS runtime acceptance remains pending. See PLATFORMS.md for exact evidence and limits.
 
