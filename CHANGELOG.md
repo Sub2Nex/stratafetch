@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.4 — 2026-10-14
 
 - Add per-user Linux desktop-menu installation, Unix browser-host registration, private same-user IPC with long-path/crash recovery, macOS app bundling and DPI-aware icons.
 - Use Command shortcuts on macOS, enable AccessKit adapters and add asynchronous native folder pickers with protection against stale results.
