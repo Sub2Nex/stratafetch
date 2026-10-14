@@ -2,9 +2,9 @@
 
 A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
-**Experimental desktop alpha — published releases currently target Windows; stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
+**Experimental desktop alpha — Windows x64 and Linux x64 packages are published; stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.
 
-Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Windows prereleases](https://github.com/Sub2Nex/stratafetch/releases). [Desktop redesign and local evidence](docs/PHASE3.md) describe the locally tested alpha and its remaining limits.
+Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Releases](https://github.com/Sub2Nex/stratafetch/releases). [Desktop redesign and local evidence](docs/PHASE3.md) describe the locally tested alpha and its remaining limits.
 
 ![Actual redesigned StrataFetch desktop with a real active transfer](docs/screenshot-phase3-dark.png)
 
@@ -82,9 +82,9 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 ## Platforms and downloads
 
-Windows x64 is the primary published build target. Current development also builds and runs on Linux x64, with desktop-menu and browser-host integration. macOS app bundling and OS integration are prepared, but native Mac builds/tests remain pending. See [platform setup and evidence](docs/PLATFORMS.md). All testing and packaging run locally; GitHub Actions is disabled. All binaries and the per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
+Alpha.4 publishes Windows x64 and Linux x64 packages, with Linux desktop-menu and browser-host integration. The Windows binaries are cross-compiled and have not been executed on Windows. The Linux build was verified on Debian 13 and requires GLIBC_2.39. macOS app bundling and OS integration are prepared, but native Mac builds/tests remain pending and no Mac binary is published. See [platform setup and evidence](docs/PLATFORMS.md). All testing and packaging run locally; GitHub Actions is disabled. All binaries and the historical per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
 
-Download the unsigned [alpha.2 portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/stratafetch-windows-x64.zip) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.2/SHA256SUMS). Alpha.2 includes no new installer. The historical alpha.1 installer remains experimental; its final unsigned build was blocked by application control here. Do not disable protection. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) reproduce the local build.
+Download [v0.1.0-alpha.4](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.4): [Windows desktop .exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.4/stratafetch-desktop.exe), [Windows portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.4/stratafetch-windows-x64.zip), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.4/stratafetch-linux-x64.tar.gz) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-alpha.4/SHA256SUMS). The executable is portable; no installer is included. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) describe native builds; alpha.4's Windows cross-build is disclosed in the [release notes](docs/RELEASE-NOTES.md).
 
 History exports contain URLs, including any query tokens. Keep them private. Imports do not restore checkpoints or completed status and never start transfers automatically. Schedules need a running desktop/service and reopen paused after shutdown. Engine settings persist in SQLite; existing partial files keep their segment layouts.
 
