@@ -51,6 +51,8 @@ def verify(path):
                 return child & 0x7FFFFFFF
         raise ValueError(f"Missing manifest resource directory {resource_id}")
 
+    if not entries(directory(0, 14)):
+        raise ValueError("Missing executable icon resource")
     languages = entries(directory(directory(0, 24), 1))
     if not languages:
         raise ValueError("Empty application manifest resource")

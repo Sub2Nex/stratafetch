@@ -690,6 +690,9 @@ impl eframe::App for App {
             });
         }
 
+        if std::mem::take(&mut self.state.browser_repair) {
+            self.updater.repair();
+        }
         settings::columns(&ctx, &mut self.state);
 
         let scheduled = scheduler::show(&ctx, &mut self.state, &self.jobs);

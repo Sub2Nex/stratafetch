@@ -1,5 +1,12 @@
 # Browser extension publishing
 
+## Complete per-store submission kit
+
+Run `python scripts/package-store-listings.py --output dist/browser-upload`, then `python packaging/package-extensions.py --output dist/browser-upload` to create the archives, copy-and-paste fields, shared icon, promotional artwork and checksums together. Each of `chrome/`, `edge/` and `firefox/` contains START-HERE.md, name, short/full description, release notes, publisher/support metadata, permission justifications, privacy answers and reviewer notes. The new universal artwork lives in assets/branding; scripts/export-branding.py reproduces its exports using Pillow.
+
+The initial ZIP can create a store draft before its assigned Chrome/Edge ID is known. Record the actual ID and rebuild the native companion before review; do not advertise a working store-origin bridge until that installation is tested. Store signing and real screenshots remain separate submission steps.
+
+
 Create the upload files locally with `python packaging/package-extensions.py --output dist/browser-upload`. Chrome, Edge and Firefox ZIPs contain Manifest V3 source, all code and icons, with manifest.json at each archive root. The output also includes unpacked local sources, an unsigned temporary-development XPI, this guide, privacy/release text and SHA256SUMS. No private keys, remote code, caches, CI or Actions are included.
 
 ## Chrome

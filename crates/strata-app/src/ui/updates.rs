@@ -36,7 +36,15 @@ impl Updater {
         }
     }
 
+    pub fn repair(&mut self) {
+        self.check_mode(true, true);
+    }
+
     pub fn check(&mut self, manual: bool) {
+        self.check_mode(manual, false);
+    }
+
+    fn check_mode(&mut self, manual: bool, repair: bool) {
         self.open |= manual;
         if self.busy {
             return;
@@ -50,7 +58,15 @@ impl Updater {
         std::thread::spawn(move || {
             let result = tokio::runtime::Runtime::new()
                 .map_err(anyhow::Error::from)
-                .and_then(|rt| rt.block_on(updates::check()));
+                .and_then(|rt| {
+                    rt.block_on(async {
+                        if repair {
+                            updates::check_repair().await
+                        } else {
+                            updates::check().await
+                        }
+                    })
+                });
             let _ = sender.send(Event::Checked(result.map_err(|e| format!("{e:#}"))));
         });
     }
@@ -76,7 +92,7 @@ impl Updater {
                 Event::Checked(Ok(None)) => self.message = "You’re up to date.".into(),
                 Event::Downloaded(Ok(prepared)) => {
                     self.prepared = Some(prepared);
-                    self.message = "Update verified and ready. Restart to install; active transfers will pause.".into();
+                    self.message = "Full Windows setup verified and ready. Restart to install all components; active transfers will pause.".into();
                     self.open = true;
                 }
                 Event::Checked(Err(error)) | Event::Downloaded(Err(error)) => {
@@ -119,7 +135,7 @@ impl Updater {
                 }
             }
             ui.hyperlink_to("Release notes and downloads", updates::RELEASES);
-            ui.small("Updates replace the Windows desktop executable. CLI and browser integration are updated through the full package.");
+            ui.small("Windows updates install the full package, including the desktop, command line, browser host and bundled extensions. History and settings are preserved.");
         });
         self.open = open;
     }

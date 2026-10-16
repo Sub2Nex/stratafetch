@@ -118,7 +118,7 @@ fn component_warning_at(directory: &Path) -> Option<String> {
     {
         return None;
     }
-    Some("The desktop was updated, but its browser components need the matching full setup package. Automatic handoff may be unavailable until the native host and extensions are updated.".into())
+    Some(if cfg!(windows) { "The browser components need updating. Choose Repair browser components below to install the matching Windows setup and restore browser handoff." } else { "Browser components need updating. Install the matching full package, then run browser setup again." }.into())
 }
 
 pub fn register_local() -> Result<()> {
@@ -140,8 +140,11 @@ pub fn register_local() -> Result<()> {
         folder.join("extensions/chromium/manifest.json"),
     )?)?;
     ensure!(
-        manifest["version"] == "0.2.0",
-        "Browser components need updating. Install the full Windows setup or matching Linux package, then try Setup again"
+        manifest["version"]
+            == serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../extensions/chromium/manifest.json"
+            ))?["version"],
+        "Browser components need updating. Use Repair browser components in Settings, then try Setup again"
     );
     let mut version = Command::new(&binary);
     version.arg("--version").stdin(Stdio::null());

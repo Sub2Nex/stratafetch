@@ -1,5 +1,7 @@
 # StrataFetch
 
+<img src="assets/branding/icon-128.png" width="96" height="96" alt="StrataFetch icon">
+
 A native, local-first HTTP download manager built in Rust. MIT OR Apache-2.0.
 
 **Public testing beta — Linux x64 is validated; Windows x64 is an unsigned cross-build preview. Stable release acceptance remains open.** No production readiness or performance advantage is claimed. There are no advertisements, telemetry, accounts, or cloud services.

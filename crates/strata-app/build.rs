@@ -3,6 +3,7 @@ use std::{env, path::PathBuf, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=app.manifest");
     println!("cargo:rerun-if-changed=app.rc");
+    println!("cargo:rerun-if-changed=../../assets/stratafetch.ico");
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
@@ -13,6 +14,28 @@ fn main() {
             "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
             root.join("app.manifest").display()
         );
+        let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+        let icon_rc = out.join("icon.rc");
+        let icon = root.join("../../assets/stratafetch.ico");
+        std::fs::write(
+            &icon_rc,
+            format!(
+                "101 ICON \"{}\"\n",
+                icon.display().to_string().replace('\\', "/")
+            ),
+        )
+        .unwrap();
+        let resource = out.join("icon.res");
+        let compiler = env::var("RC").unwrap_or_else(|_| "rc.exe".into());
+        let status = Command::new(&compiler)
+            .arg("/nologo")
+            .arg("/fo")
+            .arg(&resource)
+            .arg(&icon_rc)
+            .status()
+            .expect("Windows SDK rc.exe is required");
+        assert!(status.success(), "Windows icon compilation failed");
+        println!("cargo:rustc-link-arg-bins={}", resource.display());
     } else {
         let target = env::var("TARGET").unwrap();
         let compiler_var = format!("RC_{}", target.replace('-', "_"));

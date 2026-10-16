@@ -1,2 +1,3 @@
 // RT_MANIFEST, resource ID 1: the executable's process activation context.
 1 24 "app.manifest"
+101 ICON "../../assets/stratafetch.ico"

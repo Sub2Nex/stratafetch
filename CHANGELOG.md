@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.6
+
+- Universal download/layers icon across executables, setup, native windows and extensions.
+- Windows updates download and verify the complete installer plus update helper, keeping browser components together.
+- Browser settings can repair the current package without a version downgrade; Windows instructions no longer mention Linux.
+- Separate store listing copy, privacy answers, reviewer steps and branded media for Chrome, Edge and Firefox.
+
+
 ## 0.1.0-beta.5 — 2026-10-16
 
 - Add confirmed automatic handoff of eligible browser downloads, with browser resume on decline/failure and interrupted-handoff recovery.

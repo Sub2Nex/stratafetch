@@ -1,4 +1,4 @@
-//! GitHub release discovery and checksum-verified portable desktop updates.
+//! GitHub release discovery and checksum-verified full Windows setup updates.
 use anyhow::{Context, Result, ensure};
 use semver::Version;
 use serde::Deserialize;
@@ -44,6 +44,7 @@ impl Release {
     pub fn can_install(&self) -> bool {
         cfg!(all(target_os = "windows", target_arch = "x86_64"))
             && self.asset("stratafetch-desktop.exe").is_ok()
+            && self.asset("stratafetch-windows-x64-setup.exe").is_ok()
             && self.asset("SHA256SUMS").is_ok()
     }
 }
@@ -75,6 +76,14 @@ async fn fetch(client: &reqwest::Client, url: &str, max: usize) -> Result<Vec<u8
 }
 
 fn select_release(releases: Vec<Release>, current: &str) -> Result<Option<Release>> {
+    select_release_with_repair(releases, current, false)
+}
+
+fn select_release_with_repair(
+    releases: Vec<Release>,
+    current: &str,
+    repair: bool,
+) -> Result<Option<Release>> {
     let current = Version::parse(current)?;
     let mut candidates = Vec::new();
     for release in releases {
@@ -88,7 +97,7 @@ fn select_release(releases: Vec<Release>, current: &str) -> Result<Option<Releas
         if current.pre.is_empty() && (release.prerelease || !version.pre.is_empty()) {
             continue;
         }
-        if version > current {
+        if version > current || (repair && version == current) {
             candidates.push((version, release));
         }
     }
@@ -102,6 +111,16 @@ pub async fn check() -> Result<Option<Release>> {
     select_release(serde_json::from_slice(&body)?, env!("CARGO_PKG_VERSION"))
 }
 
+pub async fn check_repair() -> Result<Option<Release>> {
+    let client = client()?;
+    let body = fetch(&client, API, 4 * 1024 * 1024).await?;
+    select_release_with_repair(
+        serde_json::from_slice(&body)?,
+        env!("CARGO_PKG_VERSION"),
+        true,
+    )
+}
+
 fn expected_hash(sums: &str, name: &str) -> Result<String> {
     let hashes: Vec<_> = sums
         .lines()
@@ -110,7 +129,7 @@ fn expected_hash(sums: &str, name: &str) -> Result<String> {
             (file.trim().trim_start_matches('*') == name).then_some(hash)
         })
         .collect();
-    ensure!(hashes.len() == 1, "Missing or duplicate desktop checksum");
+    ensure!(hashes.len() == 1, "Missing or duplicate update checksum");
     let hash = hashes[0];
     ensure!(
         hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
@@ -123,12 +142,13 @@ fn expected_hash(sums: &str, name: &str) -> Result<String> {
 pub struct PreparedUpdate {
     directory: tempfile::TempDir,
     executable: PathBuf,
+    installer: PathBuf,
 }
 
 pub async fn download(release: &Release) -> Result<PreparedUpdate> {
     ensure!(
         release.can_install(),
-        "In-app installation is available for Windows x64 portable desktops only"
+        "This release needs a complete Windows x64 setup and desktop update helper"
     );
     let client = client()?;
     let sums = fetch(
@@ -137,37 +157,40 @@ pub async fn download(release: &Release) -> Result<PreparedUpdate> {
         64 * 1024,
     )
     .await?;
-    let expected = expected_hash(std::str::from_utf8(&sums)?, "stratafetch-desktop.exe")?;
-    let binary = fetch(
-        &client,
-        &release
-            .asset("stratafetch-desktop.exe")?
-            .browser_download_url,
-        MAX_BINARY,
-    )
-    .await?;
-    ensure!(
-        format!("{:x}", Sha256::digest(&binary)) == expected,
-        "Update checksum mismatch; installation cancelled"
-    );
-    ensure!(
-        binary.starts_with(b"MZ"),
-        "Update is not a Windows executable"
-    );
     let current = std::env::current_exe()?;
     let directory = tempfile::Builder::new()
         .prefix(".stratafetch-update-")
         .tempdir_in(current.parent().context("No executable directory")?)?;
-    let executable = directory.path().join("stratafetch-desktop.exe");
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&executable)?;
-    file.write_all(&binary)?;
-    file.sync_all()?;
+    for name in [
+        "stratafetch-desktop.exe",
+        "stratafetch-windows-x64-setup.exe",
+    ] {
+        let expected = expected_hash(std::str::from_utf8(&sums)?, name)?;
+        let binary = fetch(
+            &client,
+            &release.asset(name)?.browser_download_url,
+            MAX_BINARY,
+        )
+        .await?;
+        ensure!(
+            format!("{:x}", Sha256::digest(&binary)) == expected,
+            "Update checksum mismatch; installation cancelled"
+        );
+        ensure!(
+            binary.starts_with(b"MZ"),
+            "Update is not a Windows executable"
+        );
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(directory.path().join(name))?;
+        file.write_all(&binary)?;
+        file.sync_all()?;
+    }
     Ok(PreparedUpdate {
+        executable: directory.path().join("stratafetch-desktop.exe"),
+        installer: directory.path().join("stratafetch-windows-x64-setup.exe"),
         directory,
-        executable,
     })
 }
 
@@ -176,9 +199,10 @@ impl PreparedUpdate {
         let target = std::env::current_exe()?;
         let mut command = std::process::Command::new(&self.executable);
         command
-            .arg("--apply-update")
+            .arg("--apply-setup-update")
             .arg(target)
-            .arg(std::process::id().to_string());
+            .arg(std::process::id().to_string())
+            .arg(&self.installer);
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -193,7 +217,9 @@ impl PreparedUpdate {
 /// Invoked before eframe starts. Wait for graceful engine shutdown before replacing files.
 pub fn apply_update_if_requested() -> Option<Result<()>> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(std::ffi::OsStr::new("--apply-update")) {
+    let mode = args.next()?;
+    let full_setup = mode == "--apply-setup-update";
+    if !full_setup && mode != "--apply-update" {
         return None;
     }
     Some((|| {
@@ -204,17 +230,19 @@ pub fn apply_update_if_requested() -> Option<Result<()>> {
             .to_str()
             .context("Invalid PID")?
             .parse()?;
-        ensure!(args.next().is_none(), "Unexpected update arguments");
-        apply(target, pid)
+        if full_setup {
+            let installer = PathBuf::from(args.next().context("Missing setup executable")?);
+            ensure!(args.next().is_none(), "Unexpected update arguments");
+            apply_setup(target, pid, installer)
+        } else {
+            ensure!(args.next().is_none(), "Unexpected update arguments");
+            apply(target, pid)
+        }
     })())
 }
 
 #[cfg(windows)]
 fn apply(target: PathBuf, pid: u32) -> Result<()> {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, GetLastError},
-        System::Threading::{OpenProcess, WaitForSingleObject},
-    };
     let source = std::env::current_exe()?;
     let staging = source.parent().context("No staging directory")?;
     ensure!(
@@ -224,20 +252,7 @@ fn apply(target: PathBuf, pid: u32) -> Result<()> {
             && staging.parent() == target.parent(),
         "Invalid update staging location"
     );
-    // SYNCHRONIZE access only; no elevation or modification of the parent process.
-    unsafe {
-        let process = OpenProcess(0x00100000, 0, pid);
-        if !process.is_null() {
-            let status = WaitForSingleObject(process, 120_000);
-            CloseHandle(process);
-            ensure!(status == 0, "Timed out waiting for StrataFetch to close");
-        } else {
-            ensure!(
-                GetLastError() == ERROR_INVALID_PARAMETER,
-                "Cannot wait for the running desktop to exit"
-            );
-        }
-    }
+    wait_for_parent(pid)?;
     let backup = staging.join("previous.exe");
     // Windows can briefly retain image locks after the process signals exit.
     let mut moved = false;
@@ -256,6 +271,79 @@ fn apply(target: PathBuf, pid: u32) -> Result<()> {
         std::process::Command::new(path).spawn()?;
         Ok(())
     })
+}
+
+#[cfg(windows)]
+fn wait_for_parent(pid: u32) -> Result<()> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, ERROR_INVALID_PARAMETER, GetLastError},
+        System::Threading::{OpenProcess, WaitForSingleObject},
+    };
+    // SYNCHRONIZE access only; no elevation or modification of the parent process.
+    unsafe {
+        let process = OpenProcess(0x00100000, 0, pid);
+        if !process.is_null() {
+            let status = WaitForSingleObject(process, 120_000);
+            CloseHandle(process);
+            ensure!(status == 0, "Timed out waiting for StrataFetch to close");
+        } else {
+            ensure!(
+                GetLastError() == ERROR_INVALID_PARAMETER,
+                "Cannot wait for the running desktop to exit"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn apply_setup(target: PathBuf, pid: u32, installer: PathBuf) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    let source = std::env::current_exe()?;
+    validate_setup_paths(&source, &target, &installer)?;
+    wait_for_parent(pid)?;
+    let destination = target.parent().context("Missing installation directory")?;
+    // NSIS requires /D= to be the last argument, without quotes even with spaces.
+    // No shell is used; destination is an absolute existing application directory.
+    let result = std::process::Command::new(&installer)
+        .arg("/S")
+        .raw_arg(format!("/D={}", destination.display()))
+        .status();
+    let installed = result.context("Cannot start Windows setup")?;
+    let restarted = std::process::Command::new(&target)
+        .arg("--browser-setup")
+        .spawn();
+    ensure!(
+        installed.success(),
+        "Windows setup could not update every component. Close the background service and retry the full Windows setup. Download history is preserved."
+    );
+    restarted.context("Setup completed, but StrataFetch could not restart")?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn apply_setup(_target: PathBuf, _pid: u32, _installer: PathBuf) -> Result<()> {
+    anyhow::bail!("Full setup updates are available on Windows x64 only")
+}
+
+#[cfg(any(windows, test))]
+fn validate_setup_paths(
+    source: &std::path::Path,
+    target: &std::path::Path,
+    installer: &std::path::Path,
+) -> Result<()> {
+    let staging = source.parent().context("No staging directory")?;
+    ensure!(
+        target.is_absolute()
+            && staging.parent() == target.parent()
+            && staging
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with(".stratafetch-update-"))
+            && installer == staging.join("stratafetch-windows-x64-setup.exe")
+            && !target.to_string_lossy().contains(['"', '\n', '\r']),
+        "Invalid full setup staging location"
+    );
+    Ok(())
 }
 
 #[cfg(any(windows, test))]
@@ -298,6 +386,47 @@ mod tests {
             prerelease: tag.contains('-'),
             assets: vec![],
         }
+    }
+    #[test]
+    fn repair_selects_current_but_never_an_older_package() {
+        assert!(
+            select_release(vec![release("v1.2.0")], "1.2.0")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            select_release_with_repair(vec![release("v1.2.0")], "1.2.0", true)
+                .unwrap()
+                .unwrap()
+                .tag_name,
+            "v1.2.0"
+        );
+        assert!(
+            select_release_with_repair(vec![release("v1.1.0")], "1.2.0", true)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            select_release_with_repair(vec![release("v1.2.0"), release("v1.3.0")], "1.2.0", true)
+                .unwrap()
+                .unwrap()
+                .tag_name,
+            "v1.3.0"
+        );
+    }
+    #[test]
+    fn full_setup_requires_the_owned_staging_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("desktop.exe");
+        let stage = dir.path().join(".stratafetch-update-test");
+        let source = stage.join("stratafetch-desktop.exe");
+        let setup = stage.join("stratafetch-windows-x64-setup.exe");
+        assert!(validate_setup_paths(&source, &target, &setup).is_ok());
+        assert!(validate_setup_paths(&source, &target, &dir.path().join("external.exe")).is_err());
+        assert!(validate_setup_paths(&source, &dir.path().join("other/app.exe"), &setup).is_err());
+        assert!(
+            validate_setup_paths(&dir.path().join("unowned/app.exe"), &target, &setup).is_err()
+        );
     }
     #[test]
     fn versions_and_channels() {

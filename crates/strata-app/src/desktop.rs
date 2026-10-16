@@ -16,7 +16,7 @@ fn main() -> eframe::Result {
         if let Err(error) = result {
             rfd::MessageDialog::new()
                 .set_title("StrataFetch update failed")
-                .set_description(format!("{error:#}\nThe previous executable is retained in the application or update directory."))
+                .set_description(format!("{error:#}\nRun the full Windows setup again if components remain unavailable. Download history is preserved."))
                 .set_level(rfd::MessageLevel::Error)
                 .show();
         }
