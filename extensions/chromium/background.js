@@ -55,6 +55,34 @@ function eligible(item, ownedPause = false) {
   // Local browser-extension packages and generated page exports stay in the browser.
   return !/\.(crx|xpi|html?|mhtml)(?:$|[?#])/i.test(url) && !/\.(crx|xpi|html?|mhtml)$/i.test(item.filename || "");
 }
+// Chrome can update startTime after onCreated. The persistent ID and original
+// URL identify the live download; equivalent or later timestamps are expected.
+function sameDownload(current, original) {
+  if (!current || current.id !== original.id || current.url !== original.url) return false;
+  if (current.startTime === original.startTime) return true;
+  const before = Date.parse(original.startTime), after = Date.parse(current.startTime);
+  return Number.isFinite(after) && (!original.startTime || (Number.isFinite(before) && after >= before));
+}
+function handoffIssue(current, original, requirePaused = true) {
+  if (!sameDownload(current, original)) return "Download identity changed";
+  if (!eligible(current, true)) {
+    // Only enum/boolean diagnostics: never record download URLs or filenames.
+    if (current.state !== "in_progress") return "Download is " + current.state;
+    if (current.danger && current.danger !== "safe") return "Browser safety status is " + current.danger;
+    return "Download became private, extension-managed, or an unsupported file type";
+  }
+  return requirePaused && !current.paused ? "Browser download is no longer paused" : "";
+}
+async function waitForOwnedPause(original) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const [current] = await api.downloads.search({id: original.id});
+    const issue = handoffIssue(current, original, false);
+    if (issue) throw new Error(issue);
+    if (current.paused) return current;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error("The browser did not confirm its pause in time");
+}
 function excluded(url, rules) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
@@ -76,6 +104,7 @@ async function intercept(item) {
   pending.add(item.id);
   let paused = false;
   let accepted;
+  let ownedStartTime = String(item.startTime || "");
   let phase = "Reading capture settings";
   try {
     const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
@@ -85,17 +114,21 @@ async function intercept(item) {
     await api.downloads.pause(item.id);
     paused = true;
     phase = "Checking browser download";
+    const pausedItem = await waitForOwnedPause(item);
+    ownedStartTime = String(pausedItem.startTime || "");
+    await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
     const reply = await queuedCapture(async () => {
       const [current] = await api.downloads.search({ id: item.id });
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-      if (!eligible(current, true) || current.startTime !== item.startTime || !current.paused) {
-        throw new Error("Browser download changed before handoff");
-      }
+      const issue = handoffIssue(current, item);
+      if (issue) throw new Error(issue);
+      ownedStartTime = String(current.startTime || "");
+      await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
       if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
       const payload = { action: "capture", url: current.finalUrl || current.url };
       const filename = (current.filename || item.filename || "").split(/[\\/]/).pop();
       if (filename) payload.name = filename;
-      if (Number.isSafeInteger(current.totalBytes) && current.totalBytes >= 0) payload.size = current.totalBytes;
+      if (Number.isSafeInteger(current.totalBytes) && (current.totalBytes > 0 || (current.totalBytes === 0 && current.fileSize === 0))) payload.size = current.totalBytes;
       if (current.mime) payload.mime = current.mime;
       phase = "Opening browser bridge";
       return payload;
@@ -106,11 +139,10 @@ async function intercept(item) {
     }
     accepted = reply.download?.id;
     if (typeof accepted !== "string" || !accepted) { accepted = undefined; throw new Error("Native host did not acknowledge the download"); }
-    await api.storage.local.set({["capture_pending_" + item.id]: {startTime: item.startTime, timestamp: Date.now(), nativeId: accepted}});
+    await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now(), nativeId: accepted}});
     const [latest] = await api.downloads.search({ id: item.id });
-    if (!eligible(latest, true) || latest.startTime !== item.startTime || !latest.paused) {
-      throw new Error("Browser download changed during handoff");
-    }
+    const latestIssue = handoffIssue(latest, item);
+    if (latestIssue) throw new Error(latestIssue);
     phase = "Cancelling browser copy after acknowledgment";
     await api.downloads.cancel(item.id);
     paused = false;
@@ -127,7 +159,7 @@ async function intercept(item) {
     if (paused) {
       try {
         const [current] = await api.downloads.search({id: item.id});
-        if (current?.paused && current.state === "in_progress" && current.startTime === item.startTime) await api.downloads.resume(item.id);
+        if (current?.paused && current.state === "in_progress" && sameDownload(current, item)) await api.downloads.resume(item.id);
       }
       catch { recovered = false; await showResult(false, "Use Resume in the browser downloads panel to continue."); }
     }

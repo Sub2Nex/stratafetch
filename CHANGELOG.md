@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — extension 0.2.2
+
+- Use persistent download identity and tolerate legitimate Chrome timestamp updates during browser capture.
+- Wait briefly for an owned pause to become visible; continue to reject cancellation, manual resume, unsafe/private downloads and substituted URLs.
+- Keep verified timestamps in recovery records and omit unconfirmed initial zero-byte sizes from native preflight metadata.
+- Explain individual state/safety/identity/pause failures instead of a generic changed-download error.
+
 ## Unreleased — extension 0.2.1
 
 - Preserve the real browser handoff failure reason and phase in the extension popup; redact HTTP(S) URLs and Windows paths, and clear the issue after success.

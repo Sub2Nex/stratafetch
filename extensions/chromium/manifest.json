@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "minimum_chrome_version": "106",
   "name": "StrataFetch",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Send browser downloads to StrataFetch. Choose the desktop app or keep downloading in your browser.",
   "permissions": [
     "nativeMessaging",

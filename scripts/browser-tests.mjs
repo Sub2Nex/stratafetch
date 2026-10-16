@@ -9,6 +9,7 @@ function background(folder, options={}) {
   let enabled=options.enabled ?? true;
   const item={id:7,url:'https://example.org/file.zip',filename:'C:\\Downloads\\file.zip',state:'in_progress',startTime:'2026-10-16T12:00:00Z',danger:'safe',totalBytes:100,mime:'application/zip',...options.item};
   const items = new Map([item, ...(options.items || [])].map(value => [value.id, value]));
+  const searches = new Map();
   const api={
     runtime:{onStartup:{addListener(fn){hooks.startup=fn;}},onMessage:{addListener(fn){hooks.message=fn;}},onInstalled:{addListener(fn){hooks.installed=fn;}},async sendNativeMessage(host,payload){
       calls.push({op:'native',host,payload});
@@ -20,16 +21,76 @@ function background(folder, options={}) {
     downloads:{
       onCreated:{addListener(fn){hooks.created=fn;}},
       async pause(id){calls.push({op:'pause',id});if(options.pauseError)throw Error('pause failed');items.get(id).paused=true;},
-      async search({id}){calls.push({op:'search',id});return items.has(id)?[{...items.get(id),...options.searchItem}]:[];},
+      async search({id}){calls.push({op:'search',id});const count=(searches.get(id)||0)+1;searches.set(id,count);const changes=typeof options.searchItem==='function'?options.searchItem(id,count):options.searchItem;return items.has(id)?[{...items.get(id),...changes}]:[];},
       async resume(id){calls.push({op:'resume',id});if(options.resumeError)throw Error('resume failed');items.get(id).paused=false;},
       async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');items.get(id).state='interrupted';},
     },
     action:Object.fromEntries(['setBadgeText','setBadgeBackgroundColor','setTitle'].map(name=>[name,async value=>{calls.push({op:name,...value});if(options.badgeError)throw Error('badge failed');}])),
   };
-  runInNewContext(read(folder,'background.js'),{URL,[folder==='firefox'?'browser':'chrome']:api});
+  runInNewContext(read(folder,'background.js'),{URL,setTimeout,[folder==='firefox'?'browser':'chrome']:api});
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
+  for (const startTime of ['2026-10-16T14:00:00+02:00','2026-10-16T12:00:00.500Z']) {
+    test(folder+': Chrome timestamp updates do not reject the same live download '+startTime,async()=>{
+      let record;
+      const b=background(folder,{searchItem:{startTime},native:async()=>{record={...b.stored.capture_pending_7};return {ok:true,download:{id:'native-id'}};}});
+      await b.hooks.created(b.item);
+      assert.equal(b.calls.some(c=>c.op==='cancel'),true);
+      assert.equal(record.startTime,startTime);
+      assert.equal(b.calls.some(c=>c.op==='resume'),false);
+    });
+  }
+  test(folder+': delayed pause snapshots settle before native handoff',async()=>{
+    const b=background(folder,{searchItem:(_id,count)=>count<3?{paused:false}:{}});
+    await b.hooks.created(b.item);
+    const native=b.calls.findIndex(c=>c.op==='native');
+    assert(native>=0);
+    assert(b.calls.slice(0,native).filter(c=>c.op==='search').length>=4);
+    assert.equal(b.calls.filter(c=>c.op==='pause').length,1);
+    assert.equal(b.calls.some(c=>c.op==='cancel'),true);
+  });
+  test(folder+': an unconfirmed pause times out without taking the download',async()=>{
+    const b=background(folder,{searchItem:{paused:false}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
+    assert.match(b.stored.lastHandoffError.message,/did not confirm its pause/);
+  });
+  test(folder+': manual resume after confirmed pause prevents native handoff',async()=>{
+    const b=background(folder,{searchItem:(_id,count)=>count>=2?{paused:false}:{}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
+    assert.equal(b.calls.filter(c=>c.op==='pause').length,1);
+  });
+  test(folder+': safety changes during pause settling never reach the host',async()=>{
+    const b=background(folder,{searchItem:(_id,count)=>count===1?{paused:false}:{danger:'dangerous'}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
+    assert.match(b.stored.lastHandoffError.message,/safety status is dangerous/);
+  });
+  test(folder+': the same ID cannot substitute a different original URL',async()=>{
+    const b=background(folder,{searchItem:{url:'https://other.example.org/file.zip'}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
+  });
+  for (const fileSize of [-1,0]) {
+    test(folder+': initial zero total size is trusted only when file size confirms an empty file '+fileSize,async()=>{
+      const b=background(folder,{item:{totalBytes:0,fileSize}});
+      await b.hooks.created(b.item);
+      assert.equal(b.calls.find(c=>c.op==='native').payload.size,fileSize===0?0:undefined);
+    });
+  }
+  test(folder+': a safety change after acknowledgment rolls back native work first',async()=>{
+    const b=background(folder,{native:async payload=>{
+      if(payload.action==='capture'){b.items.get(7).danger='dangerous';return {ok:true,download:{id:'native-id'}};}
+      return {ok:true};
+    }});
+    await b.hooks.created(b.item);
+    const rollback=b.calls.findIndex(c=>c.payload?.action==='cancel');
+    assert(rollback>=0);
+    assert(rollback<b.calls.findIndex(c=>c.op==='resume'));
+    assert.equal(b.calls.some(c=>c.op==='cancel'),false);
+  });
   test(folder+': native launch failures retain the reason without signed URLs',async()=>{
     const b=background(folder,{native:async()=>{throw Error('Native host exited https://example.org/private?token=secret');}});
     await b.hooks.created(b.item);
