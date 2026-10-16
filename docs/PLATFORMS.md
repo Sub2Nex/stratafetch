@@ -44,7 +44,7 @@ The missing Common Controls v6 manifest that caused beta.2's Windows `TaskDialog
 
 The beta.3 Linux archive is built locally on Ubuntu 24.04 for x64 and requires GLIBC_2.39 or newer. Its extracted release executables complete a real CLI/native-host ranged download with exact-byte/SHA-256 verification, and its release desktop renders under WSLg. The initially attempted Ubuntu 26.04 build requiring GLIBC_2.43 is not distributed. Rust tests and strict Clippy pass; installed-browser integration, physical-GPU/DPI/accessibility acceptance and macOS/ARM64 builds remain pending. All builds are local; no CI or Actions are used.
 
-The earlier dated evidence below remains historical.
+All 84 Rust tests also pass in the optimized Ubuntu 24.04 release profile, and all 18 browser-script checks pass there. The earlier dated evidence below remains historical.
 
 From the source checkout:
 

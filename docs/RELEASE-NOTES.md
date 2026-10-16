@@ -24,7 +24,7 @@ Close older StrataFetch processes and replace the old executable or extract the 
 - The manifest check rejects beta.2 and accepts all three beta.3 Windows executables. The native Windows SDK extracts and validates the embedded desktop manifest.
 - **Native Windows CLI and desktop startup pass.** The real desktop renders settings with fresh isolated state and exits cleanly.
 - **Native Windows updater-helper replacement and restart pass.** An isolated test retains the exact previous executable, installs the exact new executable, relaunches it and captures the working desktop. This does not validate every GUI download/install interaction or application-control policy.
-- All **84 Rust tests** and strict Clippy pass on Linux; the actual Linux release CLI/native-host completes an isolated ranged download with exact-byte/SHA-256 verification.
+- All **84 Rust tests** pass, including an optimized Ubuntu 24.04 release run. Strict Clippy and all 18 browser-script checks pass; the actual Linux release CLI/native-host completes an isolated ranged download with exact-byte/SHA-256 verification.
 - Package verification checks executable formats, embedded manifests, archive contents, executable/archive byte consistency and SHA-256 hashes.
 
 All builds run locally in WSL; no CI or GitHub Actions are used. Windows binaries remain unsigned. Browser safety scans can still run, and a successful startup test is not a security-reputation or signing guarantee. No Windows/browser security protections were disabled. Installed-browser integration, physical-device DPI/accessibility transitions and macOS/ARM64 builds remain outside this release's verification.
