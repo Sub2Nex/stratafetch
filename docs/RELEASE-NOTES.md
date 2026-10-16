@@ -1,4 +1,6 @@
-# StrataFetch v0.1.0-beta.3 — Windows startup fix and Linux x64
+# StrataFetch v0.1.0-beta.3 — Windows setup installer and Linux x64
+
+**Windows installer: [Download stratafetch-windows-x64-setup.exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.3/stratafetch-windows-x64-setup.exe)** to open the installation wizard.
 
 Fixes the beta.2 Windows launch failure: “TaskDialogIndirect could not be located.” Every Windows executable now embeds the Common Controls v6 activation manifest required by the native dialogs. This release also supplies a matching Linux x64 package.
 
