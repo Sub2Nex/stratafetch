@@ -1,32 +1,30 @@
-# StrataFetch v0.1.0-beta.2 — desktop updates
+# StrataFetch v0.1.0-beta.3 — Windows startup fix and Linux x64
 
-The updater is now available in unsigned Windows x64 application downloads, built locally in Ubuntu WSL2 from the exact published beta.2 source tag. This is a development beta; native Windows execution and the full in-app upgrade/restart cycle remain unverified.
+Fixes the beta.2 Windows launch failure: “TaskDialogIndirect could not be located.” Every Windows executable now embeds the Common Controls v6 activation manifest required by the native dialogs. This release also supplies a matching Linux x64 package.
 
 ## Downloads
 
-- **stratafetch-desktop.exe** — standalone Windows x64 desktop with the updater. Portable, not an installer.
-- **stratafetch-windows-x64.zip** — matching Windows desktop, CLI, browser host, extensions, documentation and dependency notices.
-- **SHA256SUMS** — SHA-256 hashes for the EXE and ZIP.
+- **stratafetch-desktop.exe** — fixed standalone Windows x64 desktop.
+- **stratafetch-windows-x64.zip** — matching Windows desktop, CLI, browser host, extensions and documentation.
+- **stratafetch-linux-x64.tar.gz** — native Linux x64 desktop, CLI, browser host and desktop-menu integration. Built locally on Ubuntu 24.04; requires GLIBC_2.39 or newer, X11/Wayland and a compatible Vulkan driver.
+- **SHA256SUMS** — hashes for all three application downloads.
 
-Extract the ZIP into a writable permanent folder, or replace the old standalone desktop executable after closing StrataFetch. Existing users need one manual upgrade to obtain the updater; subsequent compatible desktop releases can be downloaded from within the app. Interrupted transfers reopen paused. Use the full ZIP to upgrade CLI/browser integration together. Linux downloads remain available under [beta.1](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.1); no beta.2 Linux/macOS/ARM64 package or installer is included.
+Close older StrataFetch processes and replace the old executable or extract the full package into a permanent directory. **The broken beta.2 Windows desktop requires a manual upgrade to beta.3.** Preserve profiles and completed downloads. On Linux, run `./stratafetch-desktop`; optional `./stratafetch install-desktop` adds the per-user application-menu entry.
 
-## Added
+## Fix and update behavior
 
-- **Tools → Check for updates**, with automatic checks on startup and every 24 hours while open.
-- A saved setting to disable automatic checks.
-- Windows x64 desktop update downloads with SHA-256 verification and an explicit **Restart and install** action.
-- A helper that waits for normal shutdown, retains the previous executable and restores it if replacement or launch fails.
-- Version/channel selection: stable builds ignore previews; preview builds can receive newer previews and stable releases.
-- Update packaging instructions, privacy documentation and regression tests.
+- Embed and validate the Windows process manifest for GNU and MSVC builds. Packaging now rejects executables missing Common Controls v6, reproducing and preventing the beta.2 packaging defect.
+- Retain automatic and manual update checks. Automatic checks can be disabled in Settings → General.
+- Windows x64 supports download, SHA-256 verification and explicit Restart and install. Linux checks for releases and opens their download page; it does not replace the installed Linux package automatically.
+- The CLI, browser host and extensions are updated using the full platform package.
 
-## Verification and limits
+## Verification
 
-- Built all three Windows binaries with Rust 1.99.1 for `x86_64-pc-windows-gnu`, using the source tag `v0.1.0-beta.2`, commit `3dcd1b4211ec84487dac8029e9791c554a6efd19`.
-- Formatting, strict Clippy and all **84 Rust tests** pass on Linux, including the five updater/version/checksum/recovery tests.
-- All **19 browser/CLI/native-host checks** pass, including a real isolated ranged download.
-- The native Linux debug desktop renders under WSLg with the automatic-update setting visible and fresh isolated state. This does not establish Windows runtime or physical-device acceptance.
-- Package checks verify x64 PE format, GUI/console subsystems, runtime imports, ZIP integrity and matching executable hashes. Publication documentation in the ZIP is updated to describe the subsequently added binaries; executable source remains the published tag.
+- Windows binaries built locally for `x86_64-pc-windows-gnu` from code commit `c33d784ffafe10c9687137d9c3baa85f076309aa`.
+- The manifest check rejects beta.2 and accepts all three beta.3 Windows executables. The native Windows SDK extracts and validates the embedded desktop manifest.
+- **Native Windows CLI and desktop startup pass.** The real desktop renders settings with fresh isolated state and exits cleanly.
+- **Native Windows updater-helper replacement and restart pass.** An isolated test retains the exact previous executable, installs the exact new executable, relaunches it and captures the working desktop. This does not validate every GUI download/install interaction or application-control policy.
+- All **84 Rust tests** and strict Clippy pass on Linux; the actual Linux release CLI/native-host completes an isolated ranged download with exact-byte/SHA-256 verification.
+- Package verification checks executable formats, embedded manifests, archive contents, executable/archive byte consistency and SHA-256 hashes.
 
-Windows application control blocked the native Rust build scripts. A separate local Ubuntu environment performed the cross-build; no security policy was disabled. Windows binaries have not been executed on Windows, and signing, DPI/accessibility, installed-browser integration and the full in-app upgrade/restart cycle remain pending. The helper retains a `.stratafetch-update-*` recovery directory. SHA-256 detects corruption but is not an independent publisher signature. Follow applicable application-control policies when running unsigned software.
-
-This release was initially published with source archives only. The newly attached assets contain the actual beta.2 build, not relabeled beta.1 binaries. No CI, GitHub Actions or hosted build resources were used.
+All builds run locally in WSL; no CI or GitHub Actions are used. Windows binaries remain unsigned. Browser safety scans can still run, and a successful startup test is not a security-reputation or signing guarantee. No Windows/browser security protections were disabled. Installed-browser integration, physical-device DPI/accessibility transitions and macOS/ARM64 builds remain outside this release's verification.

@@ -18,6 +18,8 @@ Browser registration is deliberately separate: see BROWSER.md. No browser interc
 
 ## Build packages
 
+Windows packaging requires Python 3 to run `scripts/verify-windows-manifest.py`. The check rejects executables without the Common Controls v6 application manifest before a ZIP is created. MSVC builds embed the manifest with the native linker; GNU builds use the target's `windres` resource compiler.
+
 ```powershell
 cargo build --release --workspace --locked
 cargo run --release -p strata-app --example branding --locked

@@ -38,6 +38,14 @@ Extract the architecture-specific macOS archive and place `StrataFetch.app` in a
 
 ## Validation
 
+### Beta.3 local verification — 2026-10-16
+
+The missing Common Controls v6 manifest that caused beta.2's Windows `TaskDialogIndirect` loader failure is fixed. The corrected Windows CLI and desktop execute natively on Windows; the desktop renders with fresh isolated state and exits cleanly. An isolated native helper test verifies waiting for a parent process, retaining the exact previous executable, installing the exact new executable, relaunching it and rendering again. The embedded manifest is checked with a PE-resource parser and the native Windows SDK. This does not validate every GUI update/download interaction or every application-control policy.
+
+The beta.3 Linux archive is built locally on Ubuntu 24.04 for x64 and requires GLIBC_2.39 or newer. Its extracted release executables complete a real CLI/native-host ranged download with exact-byte/SHA-256 verification, and its release desktop renders under WSLg. The initially attempted Ubuntu 26.04 build requiring GLIBC_2.43 is not distributed. Rust tests and strict Clippy pass; installed-browser integration, physical-GPU/DPI/accessibility acceptance and macOS/ARM64 builds remain pending. All builds are local; no CI or Actions are used.
+
+The earlier dated evidence below remains historical.
+
 From the source checkout:
 
 ```sh
