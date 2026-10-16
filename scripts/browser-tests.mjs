@@ -31,7 +31,7 @@ function background(folder, options={}) {
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
-  for (const startTime of ['2026-10-16T14:00:00+02:00','2026-10-16T12:00:00.500Z']) {
+  for (const startTime of ['2026-10-16T14:00:00+02:00','2026-10-16T12:00:00.500Z','2026-10-16T11:59:59.500Z']) {
     test(folder+': Chrome timestamp updates do not reject the same live download '+startTime,async()=>{
       let record;
       const b=background(folder,{searchItem:{startTime},native:async()=>{record={...b.stored.capture_pending_7};return {ok:true,download:{id:'native-id'}};}});

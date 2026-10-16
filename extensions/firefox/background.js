@@ -56,12 +56,12 @@ function eligible(item, ownedPause = false) {
   return !/\.(crx|xpi|html?|mhtml)(?:$|[?#])/i.test(url) && !/\.(crx|xpi|html?|mhtml)$/i.test(item.filename || "");
 }
 // Chrome can update startTime after onCreated. The persistent ID and original
-// URL identify the live download; equivalent or later timestamps are expected.
+// URL identify the live download; valid timestamp updates are expected.
 function sameDownload(current, original) {
   if (!current || current.id !== original.id || current.url !== original.url) return false;
   if (current.startTime === original.startTime) return true;
   const before = Date.parse(original.startTime), after = Date.parse(current.startTime);
-  return Number.isFinite(after) && (!original.startTime || (Number.isFinite(before) && after >= before));
+  return Number.isFinite(after) && (!original.startTime || (Number.isFinite(before)));
 }
 function handoffIssue(current, original, requirePaused = true) {
   if (!sameDownload(current, original)) return "Download identity changed";
