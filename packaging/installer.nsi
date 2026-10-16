@@ -31,6 +31,30 @@ InstallDir "$LOCALAPPDATA\Programs\StrataFetch"
 InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+; Verify every executable before changing any payload. A running desktop must
+; not leave the CLI/bridge deleted or updated while its own EXE stays locked.
+!macro CheckExecutableClosed Filename
+  ${If} ${FileExists} "$INSTDIR\${Filename}"
+    System::Call 'kernel32::CreateFileW(w "$INSTDIR\${Filename}", i 0x40000000, i 0, p 0, i 3, i 0, p 0) p.r0'
+    ${If} $0 == -1
+      MessageBox MB_OK "Close StrataFetch and its background service, then try again. No application files have been changed. Download history is preserved." /SD IDOK
+      SetErrorLevel 1
+      Abort
+    ${EndIf}
+    System::Call 'kernel32::CloseHandle(p r0)'
+  ${EndIf}
+!macroend
+Function CheckApplicationClosed
+  !insertmacro CheckExecutableClosed "stratafetch.exe"
+  !insertmacro CheckExecutableClosed "stratafetch-desktop.exe"
+  !insertmacro CheckExecutableClosed "stratafetch-browser-host.exe"
+FunctionEnd
+Function un.CheckApplicationClosed
+  !insertmacro CheckExecutableClosed "stratafetch.exe"
+  !insertmacro CheckExecutableClosed "stratafetch-desktop.exe"
+  !insertmacro CheckExecutableClosed "stratafetch-browser-host.exe"
+FunctionEnd
+
 VIProductVersion "${PRODUCT_VERSION}"
 VIAddVersionKey "ProductName" "StrataFetch"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
@@ -64,6 +88,7 @@ Function un.onInit
 FunctionEnd
 Section "StrataFetch desktop and command line" Core
   SectionIn RO
+  Call CheckApplicationClosed
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   ClearErrors
@@ -112,6 +137,7 @@ Function LaunchApp
 FunctionEnd
 Section "Uninstall"
   SetShellVarContext current
+  Call un.CheckApplicationClosed
   !ifndef TEST_BUILD
   nsExec::ExecToLog '"$INSTDIR\stratafetch-browser-host.exe" --unregister-local'
   Pop $0

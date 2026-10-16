@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — extension 0.2.1
+
+- Preserve the real browser handoff failure reason and phase in the extension popup; redact HTTP(S) URLs and Windows paths, and clear the issue after success.
+- Check executable locks before installer/uninstaller payload changes to avoid partially updating or removing an active installation.
+
 ## 0.1.0-beta.6
 
 - Universal download/layers icon across executables, setup, native windows and extensions.

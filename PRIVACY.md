@@ -11,3 +11,5 @@ Remove jobs to remove their local history and partial data. Completed files rema
 Explicit history exports contain URL query strings and download recipes. Keep exported JSON private. Engine limits and organization preferences are persisted locally. Scheduling does not use a cloud scheduler or OS autostart. Uninstallation preserves download data and removes matching optional native-host registration; browser extensions must be removed separately.
 
 Optional domain exclusion rules are stored in extension-local storage and apply to automatic capture, including subdomains. They are not sent to the native app, download servers or the developer.
+
+The extension also retains its latest handoff error and timestamp locally so failures can be explained in the popup. HTTP/HTTPS URLs and Windows file paths are redacted from this diagnostic; a successful handoff clears it. It is not sent to the developer.

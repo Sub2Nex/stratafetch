@@ -30,6 +30,27 @@ function background(folder, options={}) {
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
+  test(folder+': native launch failures retain the reason without signed URLs',async()=>{
+    const b=background(folder,{native:async()=>{throw Error('Native host exited https://example.org/private?token=secret');}});
+    await b.hooks.created(b.item);
+    assert.match(b.stored.lastHandoffError.message,/Opening browser bridge: Native host exited/);
+    assert.equal(b.stored.lastHandoffError.message.includes('secret'),false);
+    assert.equal(b.calls.some(c=>c.op==='resume'),true);
+    assert.equal(b.calls.some(c=>c.op==='cancel'),false);
+  });
+  test(folder+': successful capture clears the previous handoff issue',async()=>{
+    const b=background(folder,{stored:{lastHandoffError:{message:'old failure'}}});
+    await b.hooks.created(b.item);
+    assert.equal('lastHandoffError' in b.stored,false);
+  });
+  test(folder+': popup retains the last failure even when a new connection ping succeeds',async()=>{
+    const elements=Object.fromEntries(['status','send','current','url','capture','excluded','save-excluded','last-issue'].map(id=>[id,{}]));
+    const api={runtime:{async sendMessage(){return {ok:true,active:0};}},storage:{local:{async get(){return {capture:true,lastHandoffError:{message:'Opening browser bridge: Host exited'}};}}}};
+    runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.match(elements.status.textContent,/Connected/);
+    assert.match(elements['last-issue'].textContent,/Last handoff issue: Opening browser bridge: Host exited/);
+  });
   test(folder+': only native/download/storage permissions, no cookies or broad page access',()=>{
     const m=JSON.parse(read(folder,'manifest.json'));
     assert.deepEqual(m.permissions.slice().sort(),['activeTab','contextMenus','downloads','nativeMessaging','storage']);

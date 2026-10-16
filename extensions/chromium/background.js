@@ -2,6 +2,12 @@ const api = typeof browser !== "undefined" ? browser : chrome;
 const pending = new Set();
 let recovery;
 let captureQueue = Promise.resolve();
+function safeIssue(error) {
+  return String(error?.message || error || "No error details provided")
+    .replace(/https?:\/\/[^\s]+/gi, "[URL]")
+    .replace(/[A-Z]:\\[^\r\n]+/gi, "[local path]")
+    .slice(0, 220);
+}
 function nativeMessage(payload) {
   return payload.action === "capture" ? queuedCapture(() => payload) : nativeRequest(payload);
 }
@@ -37,7 +43,7 @@ api.contextMenus.onClicked.addListener(async info => {
   try {
     const response = await nativeMessage({ action: "capture", url: info.linkUrl });
     await showResult(response.ok, response.declined ? "Download declined" : response.ok ? "Download added to StrataFetch" : response.error);
-  } catch { await showResult(false, "StrataFetch is unavailable. Open Settings → Browser integration in the app."); }
+  } catch (error) { await showResult(false, "Browser bridge: " + safeIssue(error)); }
 });
 function eligible(item, ownedPause = false) {
   if (!item || item.incognito || item.byExtensionId || item.state !== "in_progress" || (item.paused && !ownedPause)) return false;
@@ -61,7 +67,7 @@ api.runtime.onMessage.addListener((message, _sender, respond) => {
   // The background owns the native port even when opening the confirmation
   // closes the extension popup.
   const reply = value => { try { respond(value); } catch { /* The popup may have closed. */ } };
-  nativeMessage(payload).then(reply, () => reply({ok: false, error: "Native host unavailable. Finish local setup in the StrataFetch app."}));
+  nativeMessage(payload).then(reply, error => reply({ok: false, error: "Browser bridge: " + safeIssue(error)}));
   return true;
 });
 api.downloads.onCreated.addListener(item => intercept(item));
@@ -70,12 +76,15 @@ async function intercept(item) {
   pending.add(item.id);
   let paused = false;
   let accepted;
+  let phase = "Reading capture settings";
   try {
     const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
     if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: String(item.startTime || ""), timestamp: Date.now()}});
+    phase = "Pausing browser download";
     await api.downloads.pause(item.id);
     paused = true;
+    phase = "Checking browser download";
     const reply = await queuedCapture(async () => {
       const [current] = await api.downloads.search({ id: item.id });
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
@@ -88,6 +97,7 @@ async function intercept(item) {
       if (filename) payload.name = filename;
       if (Number.isSafeInteger(current.totalBytes) && current.totalBytes >= 0) payload.size = current.totalBytes;
       if (current.mime) payload.mime = current.mime;
+      phase = "Opening browser bridge";
       return payload;
     });
     if (!reply?.ok) {
@@ -101,12 +111,13 @@ async function intercept(item) {
     if (!eligible(latest, true) || latest.startTime !== item.startTime || !latest.paused) {
       throw new Error("Browser download changed during handoff");
     }
+    phase = "Cancelling browser copy after acknowledgment";
     await api.downloads.cancel(item.id);
     paused = false;
     accepted = undefined;
     await showResult(true, "Download moved to StrataFetch");
-  } catch {
-    await showResult(false, "Handoff failed; the browser download is being resumed.");
+  } catch (error) {
+    await showResult(false, phase + ": " + safeIssue(error) + ". Keeping the download in your browser.");
   } finally {
     if (accepted) {
       try { if (!(await nativeMessage({ action: "cancel", id: accepted }))?.ok) throw new Error("Rollback rejected"); }
@@ -127,10 +138,12 @@ async function intercept(item) {
   }
 }
 async function showResult(ok, message) {
+  const detail = safeIssue(message || "Download rejected");
   await Promise.allSettled([
+    ok ? api.storage.local.remove("lastHandoffError") : api.storage.local.set({lastHandoffError: {message: detail, timestamp: Date.now()}}),
     api.action.setBadgeText({ text: ok ? "+" : "!" }),
     api.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" }),
-    api.action.setTitle({ title: `StrataFetch: ${String(message || "Download rejected").slice(0, 240)}` }),
+    api.action.setTitle({ title: `StrataFetch: ${detail}` }),
   ]);
 }
 
