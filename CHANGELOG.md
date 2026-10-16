@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-beta.3 — 2026-10-16
+
+- Fix the Windows `TaskDialogIndirect` entry-point startup failure by embedding the Common Controls v6 application manifest in every executable, for MSVC and GNU builds.
+- Reject Windows packages missing that embedded dependency during packaging.
+- Publish a matching Linux x64 package alongside the Windows downloads.
+
 ## 0.1.0-beta.2 — 2026-10-16
 
 - Desktop: automatic GitHub release checks, a manual Tools → Check for updates action, and a saved preference to disable automatic checks.

@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $workspacePath = Split-Path -Parent $PSScriptRoot
+python (Join-Path $workspacePath 'scripts/verify-windows-manifest.py') (Join-Path $workspacePath 'target/release/stratafetch.exe') (Join-Path $workspacePath 'target/release/stratafetch-desktop.exe') (Join-Path $workspacePath 'target/release/stratafetch-browser-host.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Windows manifest validation failed; rebuild before packaging' }
 $outputPath = Join-Path $workspacePath 'dist'
 $packagePath = Join-Path $outputPath 'stratafetch-windows-x64'
 # This path is generated staging only. Fresh contents prevent removed scripts,
