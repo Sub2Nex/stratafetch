@@ -52,6 +52,8 @@ match state.settings_page {
 
                 0=>{
 ui.strong("General");
+ui.checkbox(&mut state.prefs.automatic_updates, "Automatically check for updates");
+ui.small("Tools → Check for updates downloads and installs Windows desktop updates.");
 ui.label("Default destination directory");
 ui.add(egui::TextEdit::singleline(&mut state.prefs.folder).desired_width(f32::INFINITY));
 if ui.button("Choose folder…").clicked() { state.choose_preferences_folder = true; }

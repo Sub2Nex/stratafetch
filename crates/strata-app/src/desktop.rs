@@ -2,6 +2,16 @@
 mod ui;
 use eframe::egui;
 fn main() -> eframe::Result {
+    if let Some(result) = strata_app::updates::apply_update_if_requested() {
+        if let Err(error) = result {
+            rfd::MessageDialog::new()
+                .set_title("StrataFetch update failed")
+                .set_description(format!("{error:#}\nThe previous executable is retained in the application or update directory."))
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+        }
+        return Ok(());
+    }
     let smoke = std::env::var_os("STRATAFETCH_SMOKE_OUTPUT").is_some();
     let width = std::env::var("STRATAFETCH_SMOKE_WIDTH")
         .ok()

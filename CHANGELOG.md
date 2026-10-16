@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Desktop: automatic GitHub release checks, a manual Tools → Check for updates action, and a saved preference to disable automatic checks.
+- Windows x64: download and verify a desktop update against release SHA-256 checksums, then install with graceful shutdown, restart and rollback if replacement fails. Other platforms link to the release downloads.
+
 ## 0.1.0-beta.1 — 2026-10-14
 
 - Fix 18 reproduced engine, persistence, browser and desktop defects; see docs/BETA-AUDIT.md for regression coverage and scope.

@@ -23,6 +23,9 @@ tokio.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"
+semver = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+tempfile = "3"
 clap = { version = "4", features = ["derive"] }
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 directories = "6"
@@ -41,4 +44,4 @@ tempfile = "3"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Threading"] }
