@@ -1,28 +1,38 @@
-# StrataFetch v0.1.0-beta.4 — Stability update
+# StrataFetch v0.1.0-beta.5 — Automatic browser download prompts
 
-**[Download the Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-windows-x64-setup.exe)**
+**[Download the full Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.5/stratafetch-windows-x64-setup.exe)**
 
-This release fixes issues found during a code audit and reproduced with local regression tests. It retains the beta.3 Windows startup fix and includes matching Windows and Linux builds.
+## Browser downloads
 
-## Fixes
+- Eligible HTTP/HTTPS downloads pause for a **Download with StrataFetch** confirmation. Acceptance opens/focuses the app, starts the transfer and cancels the browser copy only after the native transfer receives data.
+- Decline or failed handoff resumes the original browser download. Interrupted owned pauses are recovered when the extension/browser starts again.
+- The extension popup can disable automatic capture. Private downloads, extension packages, webpage exports, blob/data URLs and known unsafe downloads stay in the browser. Cookies and browser session headers are not copied; protected/POST downloads may require the browser.
+- A second desktop launch focuses the existing window instead of opening another one.
+- Simultaneous downloads prompt one at a time. Queued downloads are rechecked, failed resume attempts retain recovery records, and bridge readiness no longer requires the app to be running.
+- The focused confirmation uses StrataFetch's own UI on Windows and Linux. Closing it or Escape declines; ordinary/older desktop exit codes cannot approve downloads.
 
-- Retry an interrupted range-probe body instead of immediately failing the download. The existing retry budget still applies; inconsistent range headers remain rejected.
-- Keep progress and durable checkpoints moving at low individual and global speed limits. Data is paced in small pieces before writing, so pausing no longer commits a large unpaced chunk.
-- Wait for a briefly busy Windows local-service pipe. Only connection attempts are retried, so an add/remove command is never automatically replayed.
-- Discard pending desktop commands on exit instead of draining the queue and starting new work during shutdown. An operation already in progress finishes before the engine pauses its transfers.
-- Reset average-speed measurements after restarting a transfer and release per-download UI tracking when history is removed.
-- Fix Windows package verification in CRLF source checkouts and record the actual Windows build target.
+## Local setup
 
-## Install and update
+The installer includes an optional **Local browser integration** component. It registers the native bridge using Windows APIs, without PowerShell policy changes, and opens Settings → Browser integration on its finish-page launch. Setup buttons open the browser setup page and the local source folder; no extension ID or registration command needs copying.
 
-- **stratafetch-windows-x64-setup.exe**: recommended Windows download; per-user setup wizard, optional Start Menu shortcuts and Windows Installed Apps uninstall entry. Close StrataFetch desktop/service before upgrading. Profiles and completed downloads are preserved.
-- **stratafetch-linux-x64.tar.gz**: desktop, CLI, native browser host and optional application-menu integration. Built on Ubuntu 24.04; requires GLIBC_2.39 or newer, X11/Wayland and compatible Vulkan support.
-- **stratafetch-desktop.exe**, **stratafetch-windows-x64.zip** and **SHA256SUMS**: desktop updater asset, full Windows bundle and checksums for all downloads.
+**Chrome / Edge:** enable Developer mode on the extensions page, choose **Load unpacked** and select the bundled **chromium** directory.
 
-Tools → Check for updates supports verified desktop replacement and restart on Windows x64. Use the setup installer to upgrade the CLI and browser host together. Linux update checks open the release download page. Beta.2 users whose desktop cannot start must install the setup manually.
+**Firefox 142+:** choose **Load Temporary Add-on** on about:debugging → This Firefox and select **firefox/manifest.json**. Unsigned local extensions must be reloaded after Firefox restarts.
 
-## Verification
+Store-upload packages, icons, Firefox data declarations and listing/reviewer text are included. Store review/signing and public listings remain pending. Chrome's assigned store origin must be registered in a matching installer before store distribution; registration accounts alone do not provide that ID. Firefox permanent installation requires a Mozilla-signed package. [Setup instructions](https://github.com/Sub2Nex/stratafetch/blob/main/docs/BROWSER.md) · [Publishing files and text](https://github.com/Sub2Nex/stratafetch/blob/main/docs/EXTENSION-PUBLISHING.md).
 
-**88 Rust tests pass on Linux and 82 pass natively on Windows**, including platform-specific regressions. Strict Clippy, formatting and all 18 browser-script tests pass. Actual Windows/Linux CLI and native-host downloads, desktop rendering, an isolated Windows beta.3 → beta.4 updater restart and installer install/reinstall/uninstall pass. ZIP contents, embedded Windows manifests and SHA-256 hashes are verified. [Detailed audit and evidence](https://github.com/Sub2Nex/stratafetch/blob/main/docs/STABILITY-BETA4.md). Each archive records its application build revision in BUILD.txt.
+## Downloads
 
-All builds use local WSL environments without CI or GitHub Actions. Windows binaries are unsigned. This beta does not claim exhaustive reliability, code-signing reputation, macOS/ARM support or complete installed-browser/accessibility testing.
+- **stratafetch-windows-x64-setup.exe** — recommended; desktop, CLI, native host, local extensions, optional shortcuts and uninstall entry.
+- **stratafetch-linux-x64.tar.gz** — full Linux x64 package built on Ubuntu 24.04, requiring GLIBC_2.39, X11/Wayland/Vulkan and a desktop portal for native dialogs.
+- **stratafetch-chromium-local.zip** and **stratafetch-firefox-local-source.zip** — unpacked extension sources, with manifest.json at the archive root. The Firefox archive is not a signed XPI.
+- **stratafetch-chrome-webstore.zip** and **stratafetch-firefox-amo.zip** — draft upload packages; these are not approved store listings or signed installation packages.
+- **stratafetch-desktop.exe**, **stratafetch-windows-x64.zip**, **SHA256SUMS** — updater executable, full Windows archive and all artifact hashes.
+
+Install the full matching setup/package once for this browser feature. The existing in-app updater replaces only the desktop executable. Setup detects missing/older companion files and directs you to the full package.
+
+## Verification and scope
+
+99 extension tests and 94 Linux Rust tests pass, including actual confirmation-button input and real HTTP/IPC bytes after acceptance. Strict Clippy passes for Linux and the Windows target. The actual Linux native host renders the confirmation framebuffer, reports readiness with the app closed, rejects unsupported URLs and declines with zero download-server requests. Isolated real Windows HKCU registration tests pass for Chrome/Edge origins, ownership refusal, repeated setup and cleanup preserving unrelated origins/history. Mozilla's web-ext linter reports zero errors, notices or warnings.
+
+All builds run locally without CI or Actions. Windows binaries and Firefox sources remain unsigned. This machine's Windows application-control policy blocked the new native-host executable, so beta.5 native Windows handoff/installer execution is unverified; no security policy was changed. Linux native checks and extension regression fixtures do not establish a complete installed Chrome/Firefox/Edge or protected-site workflow.

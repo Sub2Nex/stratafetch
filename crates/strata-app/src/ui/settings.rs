@@ -129,11 +129,21 @@ state.scheduler_open=true;
 ,
 
                 7=>{
-ui.strong("Browser integration — experimental");
-ui.label("Chrome, Edge and Firefox use an optional local native host. Start the desktop before sending a link.");
-ui.hyperlink_to("Registration and removal instructions",
-"https://github.com/Sub2Nex/stratafetch/blob/main/docs/BROWSER.md");
-ui.small("No automatic interception, cookies or browsing-history collection. No extension is installed automatically.");
+ui.strong("Local browser integration");
+ui.label("Send browser downloads to StrataFetch and open the app automatically. Setup registers the native bridge and opens your browser and the local extension folder.");
+for browser in [strata_app::browser_integration::Browser::Chrome, strata_app::browser_integration::Browser::Edge, strata_app::browser_integration::Browser::Firefox] {
+    if ui.button(format!("Set up {}…", browser.label())).clicked() { state.browser_setup = Some(browser); }
+}
+ui.separator();
+ui.label("Chrome / Edge: enable Developer mode on the extensions page, choose Load unpacked and select the chromium folder opened by Setup.");
+ui.label("Firefox: choose Load Temporary Add-on and select firefox/manifest.json. Unsigned local add-ons must be loaded again after Firefox restarts.");
+if let Ok(folder) = strata_app::browser_integration::extension_folder(strata_app::browser_integration::Browser::Chrome) {
+    ui.label(format!("Local Chromium extension: {}", folder.display()));
+    if ui.button("Copy Chromium folder path").clicked() { ctx.copy_text(folder.to_string_lossy().into()); }
+}
+ui.small("The extension popup can enable or disable automatic capture. A confirmation appears before handoff; a failed or declined handoff resumes the browser download. Private downloads, extension packages and webpage exports stay in the browser. Cookies are never copied; login-dependent downloads may need the browser.");
+ui.hyperlink_to("Local setup instructions", "https://github.com/Sub2Nex/stratafetch/blob/main/docs/BROWSER.md");
+ui.hyperlink_to("Full setup package and browser component updates", "https://github.com/Sub2Nex/stratafetch/releases/latest");
 }
 ,
 

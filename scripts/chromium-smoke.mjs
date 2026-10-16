@@ -59,7 +59,7 @@ test('real Chromium hands a URL to the native host and completes the exact downl
   let chromium, service, debuggerClient; let browserErrors = '', serviceErrors = '';
   try {
     const extension = join(root, 'extensions/chromium');
-    chromium = spawn(process.env.CHROMIUM_BIN, [...(process.env.DISPLAY ? [] : ['--headless=new']), '--no-sandbox', '--disable-gpu', '--enable-extensions', '--enable-logging=stderr', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, 'about:blank'], { env, stdio: ['ignore', 'ignore', 'pipe'] });
+    chromium = spawn(process.env.CHROMIUM_BIN, [...(process.env.DISPLAY ? [] : ['--headless=new']), '--disable-gpu', '--enable-extensions', '--enable-logging=stderr', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, 'about:blank'], { env, stdio: ['ignore', 'ignore', 'pipe'] });
     chromium.stderr.on('data', data => { browserErrors += data; });
     let endpoint;
     for (let attempt = 0; attempt < 150; attempt++) {

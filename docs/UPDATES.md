@@ -8,7 +8,7 @@ On Windows x64, choose **Download update**, then **Restart and install**. The de
 
 The `.stratafetch-update-*` directory next to the application retains `previous.exe` for manual recovery. Once the updated application works and the helper has exited, that directory may be removed. If exit is cancelled or takes over two minutes, the helper stops without replacing the desktop. Application-control restrictions can prevent the helper from starting; the running installation remains intact.
 
-Only the desktop executable is replaced. Use the full portable package to update the CLI, browser host, extensions or documentation. Linux, macOS and releases without a compatible executable/checksum offer the Releases page instead of in-app installation. Existing versions without this updater need one manual upgrade to obtain it.
+Only the desktop executable is replaced. Use the full Windows setup installer or platform archive to update the CLI, browser host, extensions or documentation. Beta.5 browser integration requires the matching full package once; Setup detects older companion components. Linux, macOS and releases without a compatible executable/checksum offer the Releases page instead of in-app installation. Existing versions without this updater need one manual upgrade to obtain it.
 
 ## Publishing compatible releases
 

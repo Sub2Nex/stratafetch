@@ -25,6 +25,15 @@ try {
     foreach ($browserName in @('Chrome','Edge','Firefox')) { if (Test-Path -LiteralPath (Join-Path $testRoot $browserName)) { throw 'Registration left behind' } }
     foreach ($fileName in @('browser-origins.json','chromium-host.json','firefox-host.json')) { if (Test-Path -LiteralPath (Join-Path $statePath $fileName)) { throw 'Manifest left behind' } }
     if (-not (Test-Path -LiteralPath (Join-Path $statePath 'history-marker.txt'))) { throw 'Uninstall removed history' }
+    $manual = 'chrome-extension://' + ('c'*32) + '/'
+    ConvertTo-Json -InputObject @($manual) | Set-Content -LiteralPath (Join-Path $statePath 'browser-origins.json')
+    & $registerScript -BinaryPath $hostPath -ChromiumExtensionId ('a'*32) -EdgeExtensionId ('b'*32) -TestRegistryRoot $testRoot
+    & $registerScript -BinaryPath $hostPath -ChromiumExtensionId ('a'*32) -EdgeExtensionId ('b'*32) -TestRegistryRoot $testRoot
+    $merged = @(Get-Content -LiteralPath (Join-Path $statePath 'browser-origins.json') -Raw | ConvertFrom-Json)
+    if ($merged.Count -ne 4 -or $merged -notcontains $manual) { throw 'Registration lost unrelated origins or duplicated entries' }
+    & $registerScript -Uninstall -BinaryPath $hostPath -TestRegistryRoot $testRoot
+    $remaining = @(Get-Content -LiteralPath (Join-Path $statePath 'browser-origins.json') -Raw | ConvertFrom-Json)
+    if ($remaining.Count -ne 1 -or $remaining[0] -ne $manual) { throw 'Unregister removed unrelated origins' }
     Write-Output 'Isolated real HKCU registration, distinct Chrome/Edge origins, ownership rejection and unregister/data-preservation tests passed.'
 } finally {
     $env:STRATAFETCH_STATE_DIR = $previousState

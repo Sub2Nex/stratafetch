@@ -62,6 +62,7 @@ def main():
             product = 'StrataFetch-InstallerTest-'+args.test_id
             defines['UNINSTALL_KEY'] = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\'+product
             defines['START_MENU_DIR'] = product
+            defines['TEST_BUILD'] = '1'
         command = [args.compiler, flag+'V3',
                    *[flag+'D'+key+'='+value for key, value in defines.items()],
                    str(root/'packaging/installer.nsi')]

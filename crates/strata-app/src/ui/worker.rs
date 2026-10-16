@@ -16,6 +16,7 @@ use strata_app::{Command, Reply, execute, ipc, shutdown, state_dir};
 use strata_core::{Manager, Options, Settings, metadata::Metadata};
 
 pub enum Request {
+    BrowserSetup(strata_app::browser_integration::Browser),
     Command(Command),
     Sequence(Vec<Command>),
 
@@ -45,6 +46,7 @@ pub enum Request {
 }
 
 pub enum Event {
+    Focus(strata_app::browser_integration::Attention),
     Message(String),
 
     Metadata {
@@ -185,6 +187,7 @@ impl Worker {
                 });
 
                 let snapshots = {
+                    let events = events.clone();
                     let latest = latest.clone();
 
                     let ctx = ctx.clone();
@@ -201,6 +204,9 @@ impl Worker {
 
                         loop {
                             tick.tick().await;
+                            if let Ok(Some(attention)) = strata_app::browser_integration::take_attention(&dir) {
+                                emit(&events, &ctx, Event::Focus(attention));
+                            }
 
                             let before = polling_generation.load(Ordering::SeqCst);
                             if !before.is_multiple_of(2) {
@@ -234,11 +240,23 @@ impl Worker {
                     }
                     if !matches!(
                         request,
-                        Request::Probe { .. } | Request::ChooseFolder { .. }
+                        Request::Probe { .. } | Request::ChooseFolder { .. } | Request::BrowserSetup(_)
                     ) {
                         snapshots.1.fetch_add(1, Ordering::SeqCst);
                     }
                     let reply = match request {
+                        Request::BrowserSetup(browser) => {
+                            let events = events.clone();
+                            let ctx = ctx.clone();
+                            tokio::task::spawn_blocking(move || {
+                                let message = match strata_app::browser_integration::setup(browser) {
+                                    Ok(()) => format!("{} is open and the native bridge is ready. Follow the local extension steps in Browser integration.", browser.label()),
+                                    Err(error) => format!("Browser setup: {error:#}"),
+                                };
+                                emit(&events, &ctx, Event::Message(message));
+                            });
+                            continue;
+                        }
                         Request::ChooseFolder { target, initial } => {
                             let events = events.clone();
                             let ctx = ctx.clone();

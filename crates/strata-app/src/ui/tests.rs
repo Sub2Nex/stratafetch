@@ -1,6 +1,47 @@
 use super::{settings, transfer_dialog, ui_state::State};
 use eframe::egui;
 #[test]
+fn local_browser_setup_renders_buttons_and_approval_steps() {
+    let ctx = egui::Context::default();
+    let mut state = State::new(Default::default());
+    state.show_settings();
+    state.settings_page = 7;
+    for frame in 0..3 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(frame as f64),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1280.0, 720.0),
+                )),
+                ..Default::default()
+            },
+            |root| {
+                egui::CentralPanel::default().show(root, |_| {});
+                settings::show(root.ctx(), &mut state);
+            },
+        );
+        output.textures_delta.clear();
+        if frame == 2 {
+            for text in [
+                "Set up Chrome",
+                "Set up Edge",
+                "Set up Firefox",
+                "Load unpacked",
+                "Temporary Add-on",
+            ] {
+                assert!(
+                    output
+                        .shapes
+                        .iter()
+                        .any(|shape| has_text(&shape.shape, text)),
+                    "missing browser setup control: {text}"
+                );
+            }
+        }
+    }
+}
+#[test]
 fn restarting_a_transfer_resets_its_average_speed_baseline() {
     use std::time::{Duration, Instant};
     let temp = tempfile::tempdir().unwrap();

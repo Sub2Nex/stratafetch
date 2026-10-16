@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.5 — 2026-10-16
+
+- Add confirmed automatic handoff of eligible browser downloads, with browser resume on decline/failure and interrupted-handoff recovery.
+- Launch/focus one desktop window per profile and open transfer details for browser requests.
+- Add guided local Chrome/Edge/Firefox setup and optional installer registration through native Windows APIs.
+- Serialize simultaneous download confirmations, recheck queued downloads, retain failed-resume recovery records, and report actual native bridge readiness.
+- Render confirmation in a focused StrataFetch window without an optional Linux message-dialog utility. Reject ordinary/older desktop exit codes as approval.
+- Bundle stable local Chromium IDs, source ZIPs and store-upload ZIPs with icons and Firefox data declarations. Store signing/listings remain pending; local approval and Firefox temporary-loading limits remain explicit.
+- Preserve unrelated native origins during register/unregister and reject mismatched companion components after desktop-only updates.
+
 ## 0.1.0-beta.4 — 2026-10-16
 
 - Retry disconnected/truncated range-probe bodies within the existing retry budget.

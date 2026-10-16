@@ -1,7 +1,12 @@
 //! Shared command interface for CLI, desktop, and browser native messaging.
 pub mod branding;
+pub mod browser_capture;
+mod browser_confirmation;
+pub mod browser_integration;
 #[cfg(unix)]
 pub mod browser_registration;
+#[cfg(windows)]
+mod browser_windows;
 pub mod ipc;
 #[cfg(target_os = "linux")]
 pub mod linux_desktop;

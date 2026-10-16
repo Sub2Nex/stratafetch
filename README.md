@@ -14,7 +14,7 @@ Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Releases
 
 ## Run
 
-For Windows, download and open [stratafetch-windows-x64-setup.exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-windows-x64-setup.exe). Its installation wizard installs StrataFetch for your user, adds optional Start Menu shortcuts and registers an uninstall entry. The finish page can launch the desktop. Rust is only needed when building from source.
+For Windows, download and open [stratafetch-windows-x64-setup.exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.5/stratafetch-windows-x64-setup.exe). Its installation wizard installs StrataFetch for your user, adds optional Start Menu shortcuts and registers an uninstall entry. The finish page can launch the desktop. Rust is only needed when building from source.
 
 Install stable Rust and the platform build tools. On Windows use Visual Studio Build Tools with the C++ workload. On Linux install `libxkbcommon-dev`, `libwayland-dev`, and standard C/C++ development tools.
 
@@ -27,7 +27,7 @@ The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open
 
 ## Updates
 
-Download [v0.1.0-beta.4](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.4): [Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-windows-x64-setup.exe), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-linux-x64.tar.gz), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/SHA256SUMS). Beta.4 fixes interrupted probes, stalled progress at low speed limits, busy Windows service connections and pending work during shutdown. It retains the beta.3 Windows startup fix. A standalone desktop and ZIP support the updater and full bundle deployments. Binaries remain unsigned, and Chrome may perform its own safety scan. All builds run locally without CI or Actions.
+Download [v0.1.0-beta.5](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.5): [Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.5/stratafetch-windows-x64-setup.exe), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.5/stratafetch-linux-x64.tar.gz) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.5/SHA256SUMS). Beta.5 adds automatic browser-download handoff, native confirmation, app launch/focus and guided local-extension setup. Install the full matching package for these browser components; a desktop-only update does not replace the host or extension files. Builds run locally without CI or Actions.
 
 The desktop supports automatic update checks and **Tools → Check for updates…**. Windows x64 users can download, verify and install desktop updates with a restart. Automatic checks can be disabled in Settings → General. See [update behavior and release packaging](docs/UPDATES.md).
 
@@ -67,7 +67,7 @@ With a desktop or `serve` instance running, commands use local IPC. Without one,
 | Limits | Aggregate bandwidth through GUI/CLI; per-download GUI/CLI limits and priority; pause before changing job settings |
 | Native desktop | Virtualized sortable table, unified selection, original vector toolbar, tree filters, async Add dialog, tabbed transfer details; measured statistics on demand |
 | Preferences | Destination, light/dark theme, core English/Swedish labels, window/sidebar/table widths and column order, completion options |
-| Browser handoff | Experimental Chrome/Edge/Firefox extensions and Rust native host; manual registration |
+| Browser handoff | Local Chrome/Edge/Firefox sources, guided native-host setup, confirmed automatic handoff and browser fallback |
 | Scheduling/categories | Scheduled UTC starts while engine runs; categories, optional extension subfolders, priority/FIFO queues |
 | Batch controls/history recipes | GUI batches pause/resume/cancel/remove in groups of 256; bounded JSON exports/imports recreate paused recipes |
 | Tray, notifications, clipboard monitoring, drag/drop | Planned |
@@ -80,7 +80,7 @@ With a desktop or `serve` instance running, commands use local IPC. Without one,
 |---|---|---|
 | Resume and bandwidth controls | Byte-validated HTTP resume and payload limits | FDM documents resume/traffic modes; JDownloader documents pause and bandwidth limits |
 | Organization and scheduling | Extension folders and timed starts while running | IDM and FDM document broader category/scheduler options |
-| Browser integration | Explicit handoff, experimental extensions | IDM documents mature browser integration and site exceptions |
+| Browser integration | Confirmed direct-URL capture, local extension loading and browser fallback | IDM documents mature browser integration and site exceptions |
 | Archive extraction/torrents | Not implemented | JDownloader documents archive extraction; FDM documents BitTorrent |
 | Public source | Entire Rust workspace, MIT OR Apache-2.0 | JDownloader describes open source; FDM labels open source specifically under legacy 3.9 features |
 
@@ -88,15 +88,15 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 ## Platforms and downloads
 
-Beta.1 publishes Windows x64 and Linux x64 packages, with Linux desktop-menu and browser-host integration. The Windows binaries are cross-compiled and have not been executed on Windows. The Linux build was verified on Debian 13 and requires GLIBC_2.39. macOS app bundling and OS integration are prepared, but native Mac builds/tests remain pending and no Mac binary is published. See [platform setup and evidence](docs/PLATFORMS.md). All testing and packaging run locally; GitHub Actions is disabled. All binaries and the historical per-user NSIS installer are unsigned. No signing or notarization is claimed. Stable release acceptance remains open.
+Current releases include a Windows setup installer and Linux x64 archive built on Ubuntu 24.04 (GLIBC_2.39). Windows executables are built locally in WSL; beta.5 native execution is blocked by this build machine's application-control policy. Linux desktop/download checks are local; macOS and ARM64 binaries are not published. All Windows binaries remain unsigned. See the current release notes for exact verification.
 
-Download [v0.1.0-beta.1](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.1): [Windows desktop .exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.1/stratafetch-desktop.exe), [Windows portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.1/stratafetch-windows-x64.zip), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.1/stratafetch-linux-x64.tar.gz) and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.1/SHA256SUMS). The executable is portable; no installer is included. Browser integration is a separate opt-in step. [Packaging instructions](docs/INSTALLATION.md) describe native builds; beta.1's Windows cross-build is disclosed in the [release notes](docs/RELEASE-NOTES.md).
+Earlier previews and their historical limitations remain in the GitHub release archive.
 
 History exports contain URLs, including any query tokens. Keep them private. Imports do not restore checkpoints or completed status and never start transfers automatically. Schedules need a running desktop/service and reopen paused after shutdown. Engine settings persist in SQLite; existing partial files keep their segment layouts.
 
 ## Browser integration
 
-See [browser installation](docs/BROWSER.md). The extension reads only a selected link or explicitly requested current-tab URL. It does not collect cookies or browsing history, intercept all downloads, or detect protected streams. Start the desktop or CLI service before sending a URL.
+Use **Settings → Browser integration** after installing the full setup. Setup registers the native bridge and opens the local extension folder and browser setup page. Chrome/Edge use **Load unpacked**; Firefox 142+ uses **Load Temporary Add-on** and requires reloading after browser restart until a signed extension is available. Eligible downloads pause for a StrataFetch confirmation; acceptance opens the app and transfers the download, while decline/failure resumes the browser copy. Multiple downloads prompt one at a time. Capture can be disabled in the extension popup. Cookies, POST bodies and protected streams are not transferred. See [setup and limits](docs/BROWSER.md) and [store-upload packages/listing text](docs/EXTENSION-PUBLISHING.md).
 
 ## Development
 
@@ -118,4 +118,4 @@ Published v0.1.0-beta.1 includes 18 reproduced bug fixes and a patched TLS depen
 
 ## Phase 4 development verification
 
-Reliability changes after alpha.2 and actual local benchmark results are documented in [docs/PHASE4.md](docs/PHASE4.md). [Download v0.1.0-alpha.3](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-alpha.3). This unsigned portable alpha includes the reliability fixes; incomplete native/browser checks and Windows application-control restrictions remain documented. All build and verification work remains local, with no GitHub Actions or billing configuration.
+Historical alpha reliability changes and benchmark results are documented in [docs/PHASE4.md](docs/PHASE4.md). Use the current GitHub release for downloads. All build and verification work remains local, with no GitHub Actions.

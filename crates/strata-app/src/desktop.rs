@@ -2,6 +2,16 @@
 mod ui;
 use eframe::egui;
 fn main() -> eframe::Result {
+    if let Some(result) = strata_app::browser_integration::confirmation_if_requested() {
+        std::process::exit(match result {
+            Ok(true) => strata_app::browser_integration::CONFIRM_ACCEPTED,
+            Ok(false) => strata_app::browser_integration::CONFIRM_DECLINED,
+            Err(error) => {
+                eprintln!("StrataFetch confirmation: {error:#}");
+                2
+            }
+        });
+    }
     if let Some(result) = strata_app::updates::apply_update_if_requested() {
         if let Err(error) = result {
             rfd::MessageDialog::new()
@@ -12,6 +22,20 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    let setup = std::env::args().any(|arg| arg == "--browser-setup");
+    let _desktop_lock =
+        match strata_app::browser_integration::desktop_lock(&strata_app::state_dir(), setup) {
+            Ok(Some(file)) => file,
+            Ok(None) => return Ok(()),
+            Err(error) => {
+                rfd::MessageDialog::new()
+                    .set_title("Cannot open StrataFetch")
+                    .set_description(format!("{error:#}"))
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+                return Ok(());
+            }
+        };
     let smoke = std::env::var_os("STRATAFETCH_SMOKE_OUTPUT").is_some();
     let width = std::env::var("STRATAFETCH_SMOKE_WIDTH")
         .ok()

@@ -1,10 +1,10 @@
 # Windows packages
 
-## Current beta.4 setup installer
+## Current beta.5 setup installer
 
-Download `stratafetch-windows-x64-setup.exe` from the beta.4 release and open it to launch the setup wizard. Choose a destination and optional Start Menu shortcuts, then use the finish-page checkbox to launch StrataFetch. The default location is `%LOCALAPPDATA%\Programs\StrataFetch`, and installation is per-user without administrator access. Windows Installed Apps and the Start Menu uninstall shortcut can remove it. Profiles, completed downloads and unrelated files are preserved. Close the desktop/service before upgrades or removal.
+Download `stratafetch-windows-x64-setup.exe` from the beta.5 release and open it to launch the setup wizard. Choose a destination, optional Start Menu shortcuts and the Local browser integration component. The finish-page launch opens guided browser setup when that component is selected. The default location is `%LOCALAPPDATA%\Programs\StrataFetch`, and installation is per-user without administrator access. Windows Installed Apps and the Start Menu uninstall shortcut can remove it. Profiles, completed downloads and unrelated files are preserved. Close the desktop/service before upgrades or removal.
 
-The versioned NSIS build takes its application/version metadata from Cargo.toml and installs the same verified beta.4 desktop/CLI/browser-host binaries. `python packaging/build-installer.py --package PATH --output PATH` can build locally with NSIS on Linux or Windows; `build-installer.ps1` is the Windows wrapper. Python 3.11+ is required for installer builds. The earlier installer sections below describe historical alpha behavior and evidence.
+The versioned NSIS build takes its application/version metadata from Cargo.toml and installs the matching beta.5 desktop/CLI/browser-host binaries. `python packaging/build-installer.py --package PATH --output PATH` can build locally with NSIS on Linux or Windows; `build-installer.ps1` is the Windows wrapper. Python 3.11+ is required for installer builds. The earlier installer sections below describe historical alpha behavior and evidence.
 
 Installer tests use a separate registry/shortcut namespace and a workspace destination, preserving the existing user installation. They verify all three installed binary hashes, application version, reinstall, uninstall and preservation of an unrelated sentinel file. Beta.4 includes both application and installer sources in the release tag.
 
@@ -16,11 +16,11 @@ Extract `stratafetch-windows-x64.zip` to a permanent folder and run `stratafetch
 
 ## Per-user installer
 
-`stratafetch-windows-x64-setup.exe` uses NSIS 3.13 and defaults to `%LOCALAPPDATA%\Programs\StrataFetch`. It installs all three executables, documentation, license notices and browser extension sources. Start Menu shortcuts are optional. Administrator access is not requested. Close the application before installing upgrades or uninstalling.
+`stratafetch-windows-x64-setup.exe` uses NSIS 3.10 and defaults to `%LOCALAPPDATA%\Programs\StrataFetch`. It installs all three executables, documentation, license notices and browser extension sources. Start Menu shortcuts are optional. Administrator access is not requested. Close the application before installing upgrades or uninstalling.
 
-Uninstall through Windows Installed Apps or `Uninstall.exe`. It removes the known installed files, its shortcuts and its HKCU application entry. Other files placed in the installation folder are preserved. Downloads and SQLite state under `%LOCALAPPDATA%\StrataFetch\StrataFetch\data` are preserved. Uninstallation attempts to remove matching native-host registration; another installation's registration is preserved. If PowerShell policy blocks cleanup, use the documented manual unregistration command in BROWSER.md. Uninstall does not remove browser extensions; remove those through the browser.
+Uninstall through Windows Installed Apps or `Uninstall.exe`. It removes the known installed files, its shortcuts and its HKCU application entry. Other files placed in the installation folder are preserved. Downloads and SQLite state under `%LOCALAPPDATA%\StrataFetch\StrataFetch\data` are preserved. Uninstallation attempts to remove matching native-host registration; another installation's registration is preserved. Bridge setup and cleanup use native Windows registry APIs without changing PowerShell execution policy. Uninstall does not remove browser extensions; remove those through the browser.
 
-Browser registration is deliberately separate: see BROWSER.md. No browser interception, autostart, default-handler registration, or file association is silently enabled.
+The selected Local browser integration component registers the native bridge for this user. You approve local extension loading in each browser; see BROWSER.md. Chrome/Edge use Load unpacked, and unsigned Firefox sources load temporarily. The extension popup controls automatic capture.
 
 ## Build packages
 

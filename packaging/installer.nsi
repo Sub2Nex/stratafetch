@@ -1,6 +1,7 @@
 Unicode true
 !include "MUI2.nsh"
 !include "x64.nsh"
+!include "Sections.nsh"
 !ifndef PACKAGE_DIR
 !define PACKAGE_DIR "..\dist\stratafetch-windows-x64"
 !endif
@@ -46,6 +47,7 @@ VIAddVersionKey "LegalCopyright" "StrataFetch contributors"
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\stratafetch-desktop.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch StrataFetch"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchApp
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -88,13 +90,35 @@ Section "Start Menu shortcuts" Shortcuts
   CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\StrataFetch.lnk" "$INSTDIR\stratafetch-desktop.exe"
   CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 SectionEnd
+Section "Local browser integration" Browsers
+  !ifdef TEST_BUILD
+    DetailPrint "Isolated installer test: browser registration is verified separately."
+  !else
+    nsExec::ExecToLog '"$INSTDIR\stratafetch-browser-host.exe" --register-local'
+    Pop $0
+    ${If} $0 != 0
+      MessageBox MB_OK "StrataFetch is installed. Local browser setup needs attention: open Settings > Browser integration. Existing registration was preserved." /SD IDOK
+    ${EndIf}
+  !endif
+SectionEnd
+Function LaunchApp
+  SectionGetFlags ${Browsers} $0
+  IntOp $0 $0 & ${SF_SELECTED}
+  ${If} $0 != 0
+    Exec '"$INSTDIR\stratafetch-desktop.exe" --browser-setup'
+  ${Else}
+    Exec '"$INSTDIR\stratafetch-desktop.exe"'
+  ${EndIf}
+FunctionEnd
 Section "Uninstall"
   SetShellVarContext current
-  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File "$INSTDIR\packaging\register-browser-host.ps1" -Uninstall -BinaryPath "$INSTDIR\stratafetch-browser-host.exe"'
+  !ifndef TEST_BUILD
+  nsExec::ExecToLog '"$INSTDIR\stratafetch-browser-host.exe" --unregister-local'
   Pop $0
   ${If} $0 != 0
     MessageBox MB_OK "Browser registration could not be removed automatically. See docs/BROWSER.md. Another installation's registration is preserved." /SD IDOK
   ${EndIf}
+  !endif
   ; Only remove the product files we installed. Preserve other files and all user state.
   ClearErrors
   Delete "$INSTDIR\stratafetch.exe"

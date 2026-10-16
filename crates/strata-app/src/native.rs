@@ -8,6 +8,10 @@ pub const MAX: usize = 64 * 1024;
 pub struct Message {
     pub action: String,
     pub url: Option<String>,
+    pub name: Option<String>,
+    pub size: Option<u64>,
+    pub mime: Option<String>,
+    pub id: Option<String>,
 }
 pub fn read_message(input: &mut impl Read) -> Result<Option<Message>> {
     let mut prefix = [0u8; 4];

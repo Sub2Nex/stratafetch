@@ -1,8 +1,26 @@
 //! Official browser native-messaging framing. This bridge requires a running manager.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use strata_app::{Command, download_dir, ipc, native, state_dir};
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "--version") {
+        println!("stratafetch-browser-host {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.first().is_some_and(|arg| arg == "--unregister-local") {
+        strata_app::browser_integration::unregister_local()?;
+        return Ok(());
+    }
+    if args
+        .first()
+        .is_some_and(|arg| matches!(arg.as_str(), "--register-local" | "--setup"))
+    {
+        strata_app::browser_integration::register_local()?;
+        if args[0] == "--setup" {
+            strata_app::browser_integration::launch_desktop(true)?;
+        }
+        return Ok(());
+    }
     if args
         .first()
         .is_some_and(|arg| matches!(arg.as_str(), "--register" | "--unregister"))
@@ -20,12 +38,48 @@ fn run() -> Result<()> {
     let mut output = std::io::stdout().lock();
     while let Some(message) = native::read_message(&mut input)? {
         let result: Result<_> = (|| {
+            if message.action == "capture" {
+                return strata_app::browser_capture::capture(&runtime, &message);
+            }
+            if message.action == "ping" {
+                let reply = runtime
+                    .block_on(async {
+                        tokio::time::timeout(
+                            std::time::Duration::from_millis(750),
+                            ipc::call(&state_dir(), Command::List),
+                        )
+                        .await
+                    })
+                    .ok()
+                    .and_then(Result::ok)
+                    .filter(|reply| reply.error.is_none());
+                let active = reply
+                    .as_ref()
+                    .map(|reply| {
+                        reply
+                            .jobs
+                            .iter()
+                            .filter(|job| {
+                                matches!(
+                                    job.status,
+                                    strata_core::Status::Downloading | strata_core::Status::Queued
+                                )
+                            })
+                            .count()
+                    })
+                    .unwrap_or(0);
+                return Ok(
+                    serde_json::json!({"ok":true,"running":reply.is_some(),"active":active,"bridgeVersion":env!("CARGO_PKG_VERSION")}),
+                );
+            }
             let command = match message.action.as_str() {
-                "ping" => Command::List,
                 "add" => Command::Add {
                     url: message.url.ok_or_else(|| anyhow::anyhow!("Missing URL"))?,
                     directory: download_dir(),
                     name: None,
+                },
+                "cancel" => Command::Cancel {
+                    id: message.id.context("Missing handoff ID")?,
                 },
                 _ => anyhow::bail!("Unknown action"),
             };

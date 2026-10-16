@@ -1,17 +1,33 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "106",
   "name": "StrataFetch",
-  "version": "0.1.1",
-  "description": "Send a link to your local StrataFetch download manager.",
+  "version": "0.2.0",
+  "description": "Handle browser downloads with your local StrataFetch app, with browser fallback.",
   "permissions": [
     "nativeMessaging",
     "contextMenus",
-    "activeTab"
+    "activeTab",
+    "downloads",
+    "storage"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6p3gFS6nRnce8BQYYjC0Kd/a4k5bF+KU4Pg713Ja0JlEUlypBPtF2HGdPBPM5X35woBqo11hyC2NQxbymuuKQa3bvnXtH9ea60wGvscs8ObdqyzfBfipce245KYl3NNKtPy0q78PSSQA8HGhj2MKR5fLMaepLBvOLH175MwkRbZFWsfscdWH9wck3eIIHoEIUYQ97q/V/aUiHTuopsGEdGmy8BcbAmzxMRaISyIm77I0mld2rnK5zBd+Rr7Ak/2BnnuQT6KZGoynRhBHtTVlwwX3DAa9K4qOdMBlABxuUImBnpFovZpvueUoxcvJ+UMgCXK1loqMAzbSvT4/1Hjc8QIDAQAB",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
   }
 }

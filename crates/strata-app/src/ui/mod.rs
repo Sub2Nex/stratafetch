@@ -323,13 +323,25 @@ impl App {
         }
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, ctx: &egui::Context) {
         while let Ok(message) = self.open_messages.try_recv() {
             self.state.message = Some(message);
         }
 
         while let Ok(event) = self.worker.events.try_recv() {
             match event {
+                Event::Focus(attention) => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    if attention.setup {
+                        self.state.show_settings();
+                        self.state.settings_page = 7;
+                    }
+                    if let Some(id) = attention.id {
+                        self.state.transfer = Some(id);
+                    }
+                }
                 Event::FolderSelected {
                     target,
                     initial,
@@ -544,6 +556,10 @@ impl App {
                 .as_str()
             {
                 "settings" => self.state.show_settings(),
+                "browser" => {
+                    self.state.show_settings();
+                    self.state.settings_page = 7;
+                }
 
                 "add" => self.state.show_add(),
 
@@ -603,7 +619,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.update();
+        self.update(root.ctx());
 
         let ctx = root.ctx().clone();
 
@@ -661,6 +677,9 @@ impl eframe::App for App {
 
         for command in settings::show(&ctx, &mut self.state) {
             self.command(command);
+        }
+        if let Some(browser) = self.state.browser_setup.take() {
+            self.request(Request::BrowserSetup(browser));
         }
         self.updater
             .show(&ctx, &mut self.state.prefs.automatic_updates);

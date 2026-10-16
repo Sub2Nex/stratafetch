@@ -1,3 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><title>StrataFetch</title>
-<style>body{font:14px system-ui;width:300px;padding:16px;background:#15202c;color:#eef5f7}input,button{box-sizing:border-box;width:100%;padding:10px;margin:8px 0}button{background:#49ccc2;border:0;border-radius:6px}p{overflow-wrap:anywhere}</style>
-<h2>StrataFetch</h2><p id="status" role="status" aria-live="polite">Connecting…</p><label for="url">Direct download URL</label><input id="url" type="url" placeholder="Direct download URL"><button id="current">Use current page URL</button><button id="send">Send download</button><script src="popup.js"></script></html>
+<style>body{font:14px system-ui;width:320px;padding:16px;background:#15202c;color:#eef5f7}input[type=url],button{box-sizing:border-box;width:100%;padding:10px;margin:8px 0}button{background:#49ccc2;border:0;border-radius:6px}p{overflow-wrap:anywhere}small{display:block;color:#c6d8e2;margin:10px 0}label{display:block}</style>
+<h2>StrataFetch</h2><p id="status" role="status" aria-live="polite">Connecting…</p>
+<label><input id="capture" type="checkbox" checked> Handle browser downloads with StrataFetch</label>
+<small>Shows a confirmation and opens the app. If you decline or handoff fails, the browser continues. Private downloads, page exports and extension packages stay in the browser. Cookies are never copied.</small>
+<label for="url">Direct download URL</label><input id="url" type="url" placeholder="https://…"><button id="current">Use current page URL</button><button id="send">Download with StrataFetch</button><script src="popup.js"></script></html>

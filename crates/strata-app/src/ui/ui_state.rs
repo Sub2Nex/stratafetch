@@ -376,6 +376,7 @@ pub struct State {
     pub settings_open: bool,
     pub settings_id: u64,
     pub choose_preferences_folder: bool,
+    pub browser_setup: Option<strata_app::browser_integration::Browser>,
 
     pub settings_page: usize,
 
@@ -453,6 +454,7 @@ impl State {
             settings_open: false,
             settings_id: 0,
             choose_preferences_folder: false,
+            browser_setup: None,
 
             settings_page: 0,
 
