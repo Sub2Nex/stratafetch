@@ -1,0 +1,126 @@
+use eframe::egui;
+use std::{
+    sync::mpsc,
+    time::{Duration, Instant},
+};
+use strata_app::updates::{self, PreparedUpdate, Release};
+
+enum Event {
+    Checked(Result<Option<Release>, String>),
+    Downloaded(Result<PreparedUpdate, String>),
+}
+
+pub struct Updater {
+    sender: mpsc::Sender<Event>,
+    receiver: mpsc::Receiver<Event>,
+    last_check: Option<Instant>,
+    busy: bool,
+    open: bool,
+    message: String,
+    release: Option<Release>,
+    prepared: Option<PreparedUpdate>,
+}
+
+impl Updater {
+    pub fn new() -> Self {
+        let (sender, receiver) = mpsc::channel();
+        Self {
+            sender,
+            receiver,
+            last_check: None,
+            busy: false,
+            open: false,
+            message: "Check for a newer version of StrataFetch.".into(),
+            release: None,
+            prepared: None,
+        }
+    }
+
+    pub fn check(&mut self, manual: bool) {
+        self.open |= manual;
+        if self.busy {
+            return;
+        }
+        self.last_check = Some(Instant::now());
+        self.busy = true;
+        self.release = None;
+        self.prepared = None;
+        self.message = "Checking GitHub Releases…".into();
+        let sender = self.sender.clone();
+        std::thread::spawn(move || {
+            let result = tokio::runtime::Runtime::new()
+                .map_err(anyhow::Error::from)
+                .and_then(|rt| rt.block_on(updates::check()));
+            let _ = sender.send(Event::Checked(result.map_err(|e| format!("{e:#}"))));
+        });
+    }
+
+    pub fn show(&mut self, ctx: &egui::Context, automatic: &mut bool) {
+        if *automatic
+            && std::env::var_os("STRATAFETCH_SMOKE_OUTPUT").is_none()
+            && self
+                .last_check
+                .is_none_or(|t| t.elapsed() >= Duration::from_secs(24 * 60 * 60))
+            && !self.busy
+        {
+            self.check(false);
+        }
+        while let Ok(event) = self.receiver.try_recv() {
+            self.busy = false;
+            match event {
+                Event::Checked(Ok(Some(release))) => {
+                    self.message = format!("StrataFetch {} is available.", release.tag_name);
+                    self.release = Some(release);
+                    self.open = true;
+                }
+                Event::Checked(Ok(None)) => self.message = "You’re up to date.".into(),
+                Event::Downloaded(Ok(prepared)) => {
+                    self.prepared = Some(prepared);
+                    self.message = "Update verified and ready. Restart to install; active transfers will pause.".into();
+                    self.open = true;
+                }
+                Event::Checked(Err(error)) | Event::Downloaded(Err(error)) => {
+                    self.message = format!("Update failed: {error}. You can try again.");
+                }
+            }
+        }
+        ctx.request_repaint_after(Duration::from_secs(1));
+        if !self.open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("StrataFetch updates").open(&mut open).default_width(440.0).resizable(false).show(ctx, |ui| {
+            ui.label(format!("Installed: {}", env!("CARGO_PKG_VERSION")));
+            ui.label(&self.message);
+            if self.busy { ui.spinner(); }
+            ui.checkbox(automatic, "Automatically check for updates");
+            ui.small("Checks GitHub on startup and every 24 hours while open. Downloads and restarts require your click.");
+            if ui.add_enabled(!self.busy, egui::Button::new("Check for updates")).clicked() { self.check(true); }
+            if let Some(release) = self.release.clone() {
+                if release.can_install() {
+                    if self.prepared.is_none() && ui.add_enabled(!self.busy, egui::Button::new("Download update")).clicked() {
+                        self.busy = true;
+                        self.message = "Downloading and verifying update…".into();
+                        let sender = self.sender.clone();
+                        std::thread::spawn(move || {
+                            let result = tokio::runtime::Runtime::new().map_err(anyhow::Error::from)
+                                .and_then(|rt| rt.block_on(updates::download(&release)));
+                            let _ = sender.send(Event::Downloaded(result.map_err(|e| format!("{e:#}"))));
+                        });
+                    }
+                } else {
+                    ui.label("This platform or release requires installation from the Releases page.");
+                }
+            }
+            if self.prepared.is_some() && ui.button("Restart and install").clicked() {
+                match self.prepared.take().unwrap().launch() {
+                    Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                    Err(error) => self.message = format!("Cannot install update: {error:#}"),
+                }
+            }
+            ui.hyperlink_to("Release notes and downloads", updates::RELEASES);
+            ui.small("Updates replace the Windows desktop executable. CLI and browser integration are updated through the full package.");
+        });
+        self.open = open;
+    }
+}

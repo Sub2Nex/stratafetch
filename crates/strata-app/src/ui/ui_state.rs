@@ -158,6 +158,7 @@ pub enum Completion {
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
+    pub automatic_updates: bool,
     pub folder: String,
 
     pub dark: bool,
@@ -178,6 +179,7 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            automatic_updates: true,
             folder: strata_app::download_dir().to_string_lossy().into(),
 
             dark: true,
@@ -540,6 +542,7 @@ impl State {
 
 #[derive(Clone)]
 pub enum Action {
+    CheckUpdates,
     Add,
 
     Resume,

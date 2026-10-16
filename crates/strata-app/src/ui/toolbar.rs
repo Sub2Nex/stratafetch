@@ -37,6 +37,7 @@ pub fn show(root: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action>
                         ("Scheduler…", Action::Scheduler),
                         ("Transfer statistics…", Action::Statistics),
                         ("Settings…  Ctrl+,", Action::Settings),
+                        ("Check for updates…", Action::CheckUpdates),
                     ],
                 ),
             ] {

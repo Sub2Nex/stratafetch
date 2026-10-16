@@ -8,6 +8,7 @@ pub mod linux_desktop;
 pub mod native;
 #[cfg(unix)]
 mod unix_files;
+pub mod updates;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

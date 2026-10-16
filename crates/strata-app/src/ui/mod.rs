@@ -22,6 +22,7 @@ mod ui_state;
 
 #[cfg(test)]
 mod tests;
+mod updates;
 mod worker;
 
 use eframe::egui;
@@ -53,6 +54,7 @@ struct Session {
 }
 
 pub struct App {
+    updater: updates::Updater,
     state: State,
 
     jobs: Vec<Job>,
@@ -116,6 +118,7 @@ impl App {
         let (open_sender, open_messages) = mpsc::channel();
 
         Self {
+            updater: updates::Updater::new(),
             state,
 
             jobs: Vec::new(),
@@ -181,6 +184,7 @@ impl App {
 
     fn action(&mut self, action: Action) {
         match action {
+            Action::CheckUpdates => self.updater.check(true),
             Action::Add => self.state.show_add(),
 
             Action::Resume | Action::Pause | Action::Stop => {
@@ -633,6 +637,8 @@ impl eframe::App for App {
         for command in settings::show(&ctx, &mut self.state) {
             self.command(command);
         }
+        self.updater
+            .show(&ctx, &mut self.state.prefs.automatic_updates);
         if std::mem::take(&mut self.state.choose_preferences_folder) {
             self.request(Request::ChooseFolder {
                 target: ui_state::FolderTarget::Preferences(self.state.settings_id),
