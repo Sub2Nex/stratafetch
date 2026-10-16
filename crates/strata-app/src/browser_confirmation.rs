@@ -112,9 +112,10 @@ impl Confirmation {
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     let download = ui.add_sized(
-                        [180.0, 34.0],
+                        [240.0, 34.0],
                         egui::Button::new(
-                            egui::RichText::new("Download").color(egui::Color32::WHITE),
+                            egui::RichText::new("Download with StrataFetch")
+                                .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(35, 125, 103)),
                     );

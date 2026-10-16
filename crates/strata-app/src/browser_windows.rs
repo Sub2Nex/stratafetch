@@ -202,19 +202,22 @@ fn checked_manifests(keys: &[String], binary: &Path) -> Result<Vec<String>> {
     }
     Ok(managed)
 }
-pub fn register(state: &Path, binary: &Path, chrome: &str, firefox: &str) -> Result<()> {
+pub fn register(state: &Path, binary: &Path, chrome: &[String], firefox: &str) -> Result<()> {
     register_in(state, binary, chrome, firefox, &roots())
 }
 fn register_in(
     state: &Path,
     binary: &Path,
-    chrome: &str,
+    chrome: &[String],
     firefox: &str,
     keys: &[String],
 ) -> Result<()> {
     ensure!(
-        chrome.len() == 32
-            && chrome.bytes().all(|c| (b'a'..=b'p').contains(&c))
+        !chrome.is_empty()
+            && chrome.len() <= 3
+            && chrome
+                .iter()
+                .all(|id| id.len() == 32 && id.bytes().all(|c| (b'a'..=b'p').contains(&c)))
             && firefox == "stratafetch@local",
         "Invalid bundled browser IDs"
     );
@@ -236,7 +239,13 @@ fn register_in(
     }
     baseline.sort();
     baseline.dedup();
-    let managed = vec![format!("chrome-extension://{chrome}/"), firefox.into()];
+    let mut managed: Vec<_> = chrome
+        .iter()
+        .map(|id| format!("chrome-extension://{id}/"))
+        .collect();
+    managed.push(firefox.into());
+    managed.sort();
+    managed.dedup();
     let mut all = baseline.clone();
     all.extend(managed.clone());
     all.sort();
@@ -337,10 +346,14 @@ mod tests {
         assert!(keys.iter().all(|key| get_value(key).unwrap().is_none()));
         json_file(&state.join("browser-origins.json"), &vec!["manual-origin"]).unwrap();
         std::fs::write(state.join("history-marker"), b"preserved").unwrap();
-        let chrome = "a".repeat(32);
+        let chrome = vec!["a".repeat(32), "b".repeat(32), "c".repeat(32)];
         register_in(&state, &binary, &chrome, "stratafetch@local", &keys).unwrap();
         register_in(&state, &binary, &chrome, "stratafetch@local", &keys).unwrap();
-        assert_eq!(origins(&state).unwrap().len(), 3);
+        assert_eq!(origins(&state).unwrap().len(), 5);
+        let manifest: Value =
+            serde_json::from_slice(&std::fs::read(state.join("chromium-host.json")).unwrap())
+                .unwrap();
+        assert_eq!(manifest["allowed_origins"].as_array().unwrap().len(), 3);
         let other = temp.path().join("other.exe");
         std::fs::write(&other, b"other").unwrap();
         assert!(unregister_in(&state, &other, &keys).is_err());

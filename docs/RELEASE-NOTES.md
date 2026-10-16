@@ -10,6 +10,8 @@
 - A second desktop launch focuses the existing window instead of opening another one.
 - Simultaneous downloads prompt one at a time. Queued downloads are rechecked, failed resume attempts retain recovery records, and bridge readiness no longer requires the app to be running.
 - The focused confirmation uses StrataFetch's own UI on Windows and Linux. Closing it or Escape declines; ordinary/older desktop exit codes cannot approve downloads.
+- Optional domain exclusions leave selected sites and subdomains in the browser. Credential-bearing URLs and Chrome extension MIME types are excluded from automatic capture.
+- Chrome/Edge production IDs are recorded separately from the stable local ID. Native manifests allow both without rewriting the development key. Desktop-only upgrades visibly open browser setup when installed component metadata is older.
 
 ## Local setup
 
@@ -27,12 +29,13 @@ Store-upload packages, icons, Firefox data declarations and listing/reviewer tex
 - **stratafetch-linux-x64.tar.gz** — full Linux x64 package built on Ubuntu 24.04, requiring GLIBC_2.39, X11/Wayland/Vulkan and a desktop portal for native dialogs.
 - **stratafetch-chromium-local.zip** and **stratafetch-firefox-local-source.zip** — unpacked extension sources, with manifest.json at the archive root. The Firefox archive is not a signed XPI.
 - **stratafetch-chrome-webstore.zip** and **stratafetch-firefox-amo.zip** — draft upload packages; these are not approved store listings or signed installation packages.
+- **stratafetch-edge-addons.zip** — separate Edge submission ZIP. **stratafetch-firefox-unsigned-dev.xpi** — unsigned temporary-development package; standard Firefox requires signing for permanent installation.
 - **stratafetch-desktop.exe**, **stratafetch-windows-x64.zip**, **SHA256SUMS** — updater executable, full Windows archive and all artifact hashes.
 
 Install the full matching setup/package once for this browser feature. The existing in-app updater replaces only the desktop executable. Setup detects missing/older companion files and directs you to the full package.
 
 ## Verification and scope
 
-99 extension tests and 94 Linux Rust tests pass, including actual confirmation-button input and real HTTP/IPC bytes after acceptance. Strict Clippy passes for Linux and the Windows target. The actual Linux native host renders the confirmation framebuffer, reports readiness with the app closed, rejects unsupported URLs and declines with zero download-server requests. Isolated real Windows HKCU registration tests pass for Chrome/Edge origins, ownership refusal, repeated setup and cleanup preserving unrelated origins/history. Mozilla's web-ext linter reports zero errors, notices or warnings.
+117 extension tests, 4 packaging/identity tests and 97 Linux Rust tests pass, including actual confirmation-button input and real HTTP/IPC bytes after acceptance. Strict Clippy passes for Linux and the Windows target. The actual Linux native host renders the confirmation framebuffer, reports readiness with the app closed, rejects unsupported URLs and declines with zero download-server requests. Isolated real Windows HKCU registration tests pass for Chrome/Edge origins, ownership refusal, repeated setup and cleanup preserving unrelated origins/history. Mozilla's web-ext linter reports zero errors, notices or warnings.
 
 All builds run locally without CI or Actions. Windows binaries and Firefox sources remain unsigned. This machine's Windows application-control policy blocked the new native-host executable, so beta.5 native Windows handoff/installer execution is unverified; no security policy was changed. Linux native checks and extension regression fixtures do not establish a complete installed Chrome/Firefox/Edge or protected-site workflow.

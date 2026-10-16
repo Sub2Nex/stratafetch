@@ -1,12 +1,35 @@
 # Browser extension publishing
 
-Create the upload files locally with `python packaging/package-extensions.py --output dist/browser-upload`. Both ZIPs contain Manifest V3 source, all code and icons. No remote code, bundling step, CI or Actions are used.
+Create the upload files locally with `python packaging/package-extensions.py --output dist/browser-upload`. Chrome, Edge and Firefox ZIPs contain Manifest V3 source, all code and icons, with manifest.json at each archive root. The output also includes unpacked local sources, an unsigned temporary-development XPI, this guide, privacy/release text and SHA256SUMS. No private keys, remote code, caches, CI or Actions are included.
 
 ## Chrome
 
 Upload **stratafetch-chrome-webstore.zip** as a new draft in the [developer dashboard](https://chrome.google.com/webstore/devconsole). This archive omits the local development key. The first upload assigns the store ID and public key; upload alone does not publish it.
 
-Before distributing the store version, set `extensions/local-ids.json` and the key in `extensions/chromium/manifest.json` to the draft's assigned ID/public key, rebuild the full installer, and test native messaging with that origin. Never publish an extension with an incompatible native bridge. The same Chrome listing can be installed in Edge after user approval; a separate Edge Add-ons listing assigns a different ID which also needs registration.
+Do not change `extensions/local-ids.json` or the development manifest key. Record assigned store IDs with the helper below. Store identities are kept separately in `extensions/store-ids.json`, initially null. The Chrome listing can also be installed in Edge after approval, but an Edge Add-ons listing assigns a separate ID.
+
+## Microsoft Edge
+
+Upload **stratafetch-edge-addons.zip** in the [Edge developer dashboard](https://partner.microsoft.com/dashboard/microsoftedge/overview) as a new extension draft. The ZIP contains Chromium-compatible source and omits the development key. Record Edge's actual 32-letter extension ID separately from Chrome's ID; a submission/product identifier may be different.
+
+## Record assigned identities and rebuild
+
+Use the actual IDs from each store. Uppercase words below are placeholders, not valid IDs:
+
+```sh
+python packaging/configure-store-id.py chrome --id ACTUAL_CHROME_EXTENSION_ID --public-key-file chrome-public-key.txt
+python packaging/configure-store-id.py edge --id ACTUAL_EDGE_EXTENSION_ID
+python packaging/package-extensions.py --output dist/browser-upload
+cargo build --release --workspace --bins --locked
+```
+
+The public-key option is optional until the store exposes its key. Supply only a public key; the helper rejects private keys and keys that do not derive the supplied ID. Optional `--listing-url` accepts HTTPS on that browser's official store domain. The helper never changes the development ID/key.
+
+Rebuild the full Windows installer or Linux package from the same committed configuration. Install it, then use Settings → Browser integration or `stratafetch-browser-host --register-local`. Native manifests allow the stable local origin and explicitly configured Chrome/Edge store origins together. Firefox retains its stable manifest ID. Unregister preserves unrelated manually registered origins.
+
+When a store public key is available, extract its generated store ZIP into an unpacked directory in a separate test profile and verify that its displayed ID matches the assigned ID before native messaging tests. Otherwise use the store's supported tester distribution when available. Verify both confirmation choices, then repeat with the original local development directory to check that both identities work. Do not distribute an extension with an incompatible bridge.
+
+No production ID is needed for the initial upload ZIPs. Store submissions remain manual owner actions.
 
 ## Firefox
 

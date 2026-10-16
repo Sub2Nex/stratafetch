@@ -15,7 +15,7 @@ function background(folder, options={}) {
       if(options.native) return options.native(payload);
       return payload.action==='cancel' ? {ok:true} : {ok:true,download:{id:'native-id'}};
     }},
-    storage:{local:{async get(keys){return keys===null?{capture:enabled,...stored}:{capture:enabled};},async set(value){if ("capture" in value) enabled=value.capture;Object.assign(stored,value);},async remove(key){delete stored[key];}}},
+    storage:{local:{async get(keys){return keys===null?{capture:enabled,...stored}:{...keys,...stored,capture:enabled};},async set(value){if ("capture" in value) enabled=value.capture;Object.assign(stored,value);},async remove(key){delete stored[key];}}},
     contextMenus:{async removeAll(){},create(value){calls.push({op:'menu',value});},onClicked:{addListener(fn){hooks.clicked=fn;}}},
     downloads:{
       onCreated:{addListener(fn){hooks.created=fn;}},
@@ -26,7 +26,7 @@ function background(folder, options={}) {
     },
     action:Object.fromEntries(['setBadgeText','setBadgeBackgroundColor','setTitle'].map(name=>[name,async value=>{calls.push({op:name,...value});if(options.badgeError)throw Error('badge failed');}])),
   };
-  runInNewContext(read(folder,'background.js'),{[folder==='firefox'?'browser':'chrome']:api});
+  runInNewContext(read(folder,'background.js'),{URL,[folder==='firefox'?'browser':'chrome']:api});
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
@@ -80,7 +80,7 @@ for(const folder of ['chromium','firefox']) {
       }
     });
   }
-  for(const item of [{incognito:true},{byExtensionId:'another'},{state:'complete'},{paused:true},{url:'blob:secret'},{url:'data:text/plain,hi'},{danger:'dangerous'},{mime:'text/html'},{url:'https://example.org/extension.xpi'},{url:'https://example.org/extension.crx'}]) {
+  for(const item of [{incognito:true},{byExtensionId:'another'},{state:'complete'},{paused:true},{url:'blob:secret'},{url:'data:text/plain,hi'},{url:'https://user:secret@example.org/file.zip'},{url:'http://['},{mime:'application/x-chrome-extension'},{danger:'dangerous'},{mime:'text/html'},{url:'https://example.org/extension.xpi'},{url:'https://example.org/extension.crx'}]) {
     test(folder+': does not capture '+JSON.stringify(item),async()=>{
       const b=background(folder,{item});await b.hooks.created(b.item);assert.equal(b.calls.length,0);
     });
@@ -119,19 +119,19 @@ for(const folder of ['chromium','firefox']) {
   });
   for(const result of ['empty','restricted','error']) {
     test(folder+': current page '+result+' has an actionable error',async()=>{
-      const elements=Object.fromEntries(['status','send','current','url','capture'].map(id=>[id,{value:'previous URL'}]));
+      const elements=Object.fromEntries(['status','send','current','url','capture','excluded','save-excluded'].map(id=>[id,{value:'previous URL'}]));
       const api={runtime:{async sendMessage(){return {ok:true,active:0};}},storage:{local:{async get(){return {capture:true};},async set(){}}},
         tabs:{async query(){if(result==='error')throw Error();return result==='empty'?[]:[{id:1}];}}};
-      runInNewContext(read(folder,'popup.js'),{[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
+      runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
       await Promise.resolve();await elements.current.onclick();
       assert.equal(elements.url.value,'');assert.match(elements.status.textContent,/cannot read.*paste/i);
     });
   }
   test(folder+': late startup ping does not overwrite a current-tab error',async()=>{
-    const elements=Object.fromEntries(['status','send','current','url','capture'].map(id=>[id,{value:'previous'}]));let ping;
+    const elements=Object.fromEntries(['status','send','current','url','capture','excluded','save-excluded'].map(id=>[id,{value:'previous'}]));let ping;
     const api={runtime:{sendMessage(){return new Promise(resolve=>{ping=resolve;});}},
       storage:{local:{async get(){return {capture:false};},async set(){}}},tabs:{async query(){throw Error();}}};
-    runInNewContext(read(folder,'popup.js'),{[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
+    runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
     await elements.current.onclick();const error=elements.status.textContent;ping({ok:true,active:0});await Promise.resolve();await Promise.resolve();
     assert.equal(elements.status.textContent,error);
   });
@@ -160,6 +160,39 @@ for (const folder of ['chromium','firefox']) {
 
 
 for (const folder of ['chromium','firefox']) {
+  for(const url of ['https://example.org/file.zip','https://cdn.example.org/file.zip']) {
+    test(folder+': excluded domain remains in browser '+url,async()=>{
+      const b=background(folder,{item:{url},stored:{excludedDomains:['example.org']}});
+      await b.hooks.created(b.item);assert.equal(b.calls.length,0);
+    });
+  }
+  test(folder+': unrelated domains are still captured',async()=>{
+    const b=background(folder,{stored:{excludedDomains:['other.example.org']}});
+    await b.hooks.created(b.item);assert(b.calls.some(call=>call.op==='cancel'));
+  });
+  test(folder+': exclusions added while waiting prevent a queued native prompt',async()=>{
+    const next={id:8,url:'https://second.example.org/file.zip',state:'in_progress',startTime:'second'};
+    let finish;const b=background(folder,{items:[next],native:()=>new Promise(resolve=>{finish=resolve;})});
+    const first=b.hooks.created(b.item),second=b.hooks.created(next);
+    while(!finish)await Promise.resolve();
+    await b.api.storage.local.set({excludedDomains:['second.example.org']});
+    finish({ok:false,declined:true});await Promise.all([first,second]);
+    assert.equal(b.calls.filter(call=>call.op==='native').length,1);
+    assert(b.calls.some(call=>call.op==='resume'&&call.id===8));
+  });
+  for(const invalid of [false,true]) {
+    test(folder+': popup validates domain exclusions '+invalid,async()=>{
+      const elements=Object.fromEntries(['status','send','current','url','capture','excluded','save-excluded'].map(id=>[id,{}]));
+      let saved;
+      const api={runtime:{async sendMessage(){return {ok:true};}},storage:{local:{async get(){return {capture:true};},async set(value){saved=value;}}}};
+      runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
+      await new Promise(resolve=>setImmediate(resolve));
+      elements.excluded.value=invalid?'example.org/path':'EXAMPLE.ORG\n*.cdn.example.org\nexample.org';
+      await elements['save-excluded'].onclick();
+      if(invalid) {assert.equal(saved,undefined);assert.match(elements.status.textContent,/without URLs/);}
+      else {assert.deepEqual(Array.from(saved.excludedDomains),['example.org','cdn.example.org']);assert.match(elements.status.textContent,/Exclusions saved/);}
+    });
+  }
   test(folder+': simultaneous downloads pause immediately and prompt one at a time', async()=>{
     const next={id:8,url:'https://example.org/second.zip',filename:'second.zip',state:'in_progress',startTime:'second'};
     const finishes=[];
@@ -205,9 +238,9 @@ for (const folder of ['chromium','firefox']) {
   });
   for(const reply of [{ok:false,error:'Native host unavailable'},undefined,{ok:true,running:false}]) {
     test(folder+': popup accurately reports bridge readiness '+JSON.stringify(reply),async()=>{
-      const elements=Object.fromEntries(['status','send','current','url','capture'].map(id=>[id,{}]));
+      const elements=Object.fromEntries(['status','send','current','url','capture','excluded','save-excluded'].map(id=>[id,{}]));
       const api={runtime:{async sendMessage(){return reply;}},storage:{local:{async get(){return {capture:true};}}}};
-      runInNewContext(read(folder,'popup.js'),{[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
+      runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
       await new Promise(resolve=>setImmediate(resolve));
       assert.match(elements.status.textContent,reply?.ok?/Ready.*opens/:/unavailable|did not respond/i);
     });

@@ -26,6 +26,8 @@ This local unsigned extension must be loaded again after Firefox restarts. Stand
 
 The extension popup includes **Handle browser downloads with StrataFetch** (enabled initially; a disabled setting survives extension updates).
 
+Use **Keep these domains in the browser** in the popup for optional exclusions. Enter domain names, then Save exclusions. Rules include subdomains and apply to automatic capture; explicit context-menu or popup sends still work. Exclusions are rechecked before a queued confirmation opens.
+
 For an eligible HTTP/HTTPS download:
 
 1. The extension pauses the browser copy and opens a **Download with StrataFetch** confirmation.
@@ -61,6 +63,8 @@ The native host retains explicit advanced registration:
 ```
 
 Windows advanced/manual registration remains available in **packaging/register-browser-host.ps1**; the installer and app use native Windows registry APIs and need no PowerShell execution-policy changes.
+
+Development and store identities are separate: `extensions/local-ids.json` stays unchanged, while `extensions/store-ids.json` records actual Chrome/Edge IDs after draft uploads. Initial store-ID entries are null. Use `packaging/configure-store-id.py` and rebuild the full package; native setup permits both local and configured store origins. See [publishing](EXTENSION-PUBLISHING.md).
 
 ## Remove
 

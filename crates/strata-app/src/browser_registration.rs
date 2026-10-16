@@ -157,15 +157,24 @@ pub fn register(paths: &Paths, binary: &Path, browsers: BTreeMap<Browser, String
         validate_manifest(&paths.manifest(*browser), &binary)?;
     }
     record.browsers.extend(browsers.clone());
-    for (browser, id) in browsers {
+    let allowed: Vec<_> = origins(&record.browsers)
+        .into_iter()
+        .filter(|origin| origin.starts_with("chrome-extension://"))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    // Each installed Chromium-family browser accepts both local development
+    // and explicitly configured store identities. Refresh existing manifests
+    // as well when another store identity is added.
+    for (browser, id) in &record.browsers {
         let mut manifest = serde_json::json!({ "name": HOST, "description": "StrataFetch native download bridge", "path": binary, "type": "stdio" });
-        if browser == Browser::Firefox {
+        if *browser == Browser::Firefox {
             manifest["allowed_extensions"] = serde_json::json!([id]);
         } else {
-            manifest["allowed_origins"] = serde_json::json!([format!("chrome-extension://{id}/")]);
+            manifest["allowed_origins"] = serde_json::json!(allowed);
         }
         crate::unix_files::write_atomic(
-            &paths.manifest(browser),
+            &paths.manifest(*browser),
             &serde_json::to_vec_pretty(&manifest)?,
         )?;
     }
@@ -217,6 +226,36 @@ mod tests {
             },
             binary,
         )
+    }
+    #[test]
+    fn store_and_local_chromium_origins_work_in_every_registered_browser() {
+        let dir = tempfile::tempdir().unwrap();
+        let (paths, binary) = fixture(dir.path());
+        register(
+            &paths,
+            &binary,
+            BTreeMap::from([
+                (Browser::Chrome, "b".repeat(32)),
+                (Browser::Chromium, "a".repeat(32)),
+                (Browser::Edge, "c".repeat(32)),
+                (Browser::Firefox, "stratafetch@local".into()),
+            ]),
+        )
+        .unwrap();
+        let allowed: Vec<_> = ["a", "b", "c"]
+            .map(|id| format!("chrome-extension://{}/", id.repeat(32)))
+            .into();
+        for browser in [Browser::Chrome, Browser::Chromium, Browser::Edge] {
+            let manifest: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(paths.manifest(browser)).unwrap()).unwrap();
+            assert_eq!(manifest["allowed_origins"], serde_json::json!(allowed));
+        }
+        assert_eq!(
+            load_origins(&paths.state.join("browser-origins.json"))
+                .unwrap()
+                .len(),
+            4
+        );
     }
     #[test]
     fn register_update_and_uninstall_preserve_history_and_manual_origins() {

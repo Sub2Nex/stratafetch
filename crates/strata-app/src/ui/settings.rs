@@ -130,6 +130,7 @@ state.scheduler_open=true;
 
                 7=>{
 ui.strong("Local browser integration");
+if let Some(warning) = strata_app::browser_integration::browser_components_warning() { ui.colored_label(egui::Color32::from_rgb(255, 190, 80), warning); }
 ui.label("Send browser downloads to StrataFetch and open the app automatically. Setup registers the native bridge and opens your browser and the local extension folder.");
 for browser in [strata_app::browser_integration::Browser::Chrome, strata_app::browser_integration::Browser::Edge, strata_app::browser_integration::Browser::Firefox] {
     if ui.button(format!("Set up {}…", browser.label())).clicked() { state.browser_setup = Some(browser); }

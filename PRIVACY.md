@@ -9,3 +9,5 @@ Downloading necessarily contacts the selected resource and its redirects. The se
 Remove jobs to remove their local history and partial data. Completed files remain. SQLite deletion does not securely erase old pages, backups, or filesystem snapshots. Signed URLs can contain secrets, so do not share state files.
 
 Explicit history exports contain URL query strings and download recipes. Keep exported JSON private. Engine limits and organization preferences are persisted locally. Scheduling does not use a cloud scheduler or OS autostart. Uninstallation preserves download data and removes matching optional native-host registration; browser extensions must be removed separately.
+
+Optional domain exclusion rules are stored in extension-local storage and apply to automatic capture, including subdomains. They are not sent to the native app, download servers or the developer.

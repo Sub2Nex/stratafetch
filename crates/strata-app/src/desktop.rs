@@ -22,7 +22,8 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
-    let setup = std::env::args().any(|arg| arg == "--browser-setup");
+    let setup = std::env::args().any(|arg| arg == "--browser-setup")
+        || strata_app::browser_integration::browser_components_warning().is_some();
     let _desktop_lock =
         match strata_app::browser_integration::desktop_lock(&strata_app::state_dir(), setup) {
             Ok(Some(file)) => file,

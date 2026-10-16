@@ -1,6 +1,7 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const status = document.getElementById("status");
 const capture = document.getElementById("capture");
+const excluded = document.getElementById("excluded");
 let statusRevision = 0;
 async function message(payload) {
   const revision = ++statusRevision;
@@ -15,7 +16,22 @@ capture.onchange = async () => {
   try { await api.storage.local.set({ capture: capture.checked }); }
   catch { status.textContent = "Cannot save download-capture preference."; }
 };
-api.storage.local.get({ capture: true }).then(settings => { capture.checked = settings.capture; }).catch(() => { status.textContent = "Cannot read capture preference."; });
+api.storage.local.get({ capture: true, excludedDomains: [] }).then(settings => { capture.checked = settings.capture; excluded.value = (settings.excludedDomains || []).join("\n"); }).catch(() => { status.textContent = "Cannot read capture preference."; });
+document.getElementById("save-excluded").onclick = async () => {
+  ++statusRevision;
+  try {
+    const domains = [...new Set(excluded.value.split(/[\s,]+/).filter(Boolean).map(value => {
+      const url = new URL("https://" + value.toLowerCase().replace(/^\*\./, ""));
+      const host = url.hostname.replace(/\.$/, "");
+      if (!host || url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) throw new Error("Enter domain names only");
+      return host;
+    }))];
+    if (domains.length > 100) throw new Error("Use at most 100 domain exclusions");
+    await api.storage.local.set({excludedDomains: domains});
+    excluded.value = domains.join("\n");
+    status.textContent = "Exclusions saved. Matching domains and subdomains stay in the browser.";
+  } catch { status.textContent = "Cannot save exclusions. Enter up to 100 domain names, without URLs, paths or ports."; }
+};
 document.getElementById("current").onclick = async () => {
   ++statusRevision;
   const current = document.getElementById("current");

@@ -44,9 +44,16 @@ function eligible(item, ownedPause = false) {
   if (item.danger && item.danger !== "safe") return false;
   const url = item.finalUrl || item.url;
   if (!/^https?:\/\//i.test(url || "")) return false;
-  if (/^(text\/html|application\/x-xpinstall)(;|$)/i.test(item.mime || "")) return false;
+  try { const parsed = new URL(url); if (parsed.username || parsed.password) return false; } catch { return false; }
+  if (/^(text\/html|application\/x-xpinstall|application\/x-chrome-extension)(;|$)/i.test(item.mime || "")) return false;
   // Local browser-extension packages and generated page exports stay in the browser.
   return !/\.(crx|xpi|html?|mhtml)(?:$|[?#])/i.test(url) && !/\.(crx|xpi|html?|mhtml)$/i.test(item.filename || "");
+}
+function excluded(url, rules) {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
+    return Array.isArray(rules) && rules.some(rule => typeof rule === "string" && rule && (host === rule || host.endsWith("." + rule)));
+  } catch { return true; }
 }
 api.runtime.onMessage.addListener((message, _sender, respond) => {
   if (!message || !["capture", "ping"].includes(message.action)) return false;
@@ -64,15 +71,18 @@ async function intercept(item) {
   let paused = false;
   let accepted;
   try {
-    if (!(await api.storage.local.get({ capture: true })).capture) return;
+    const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
+    if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: String(item.startTime || ""), timestamp: Date.now()}});
     await api.downloads.pause(item.id);
     paused = true;
     const reply = await queuedCapture(async () => {
       const [current] = await api.downloads.search({ id: item.id });
+      const settings = await api.storage.local.get({capture: true, excludedDomains: []});
       if (!eligible(current, true) || current.startTime !== item.startTime || !current.paused) {
         throw new Error("Browser download changed before handoff");
       }
+      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
       const payload = { action: "capture", url: current.finalUrl || current.url };
       const filename = (current.filename || item.filename || "").split(/[\\/]/).pop();
       if (filename) payload.name = filename;

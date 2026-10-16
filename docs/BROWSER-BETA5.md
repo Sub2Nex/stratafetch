@@ -2,12 +2,13 @@
 
 All builds and checks are local; no CI or Actions were used.
 
-- 99 JavaScript extension tests pass for Chromium and Firefox sources: automatic capture, acknowledgment before cancellation, decline/failure fallback, queued prompts, late cancellation, post-pause privacy/type checks, closed popup relay, native port lifetime/send failure, accurate readiness and restart recovery.
-- 94 Linux Rust tests pass, including real HTTP/IPC file bytes after a confirmed transfer, rejection before a job is created, confirmation-button pointer input, explicit approval exit codes, desktop locking and ownership-preserving registration.
+- 117 JavaScript extension tests pass for Chromium and Firefox sources: automatic capture, acknowledgment before cancellation, decline/failure fallback, queued prompts, late cancellation, post-pause privacy/type checks, closed popup relay, native port lifetime/send failure, accurate readiness and restart recovery.
+- 97 Linux Rust tests pass, including real HTTP/IPC file bytes after a confirmed transfer, rejection before a job is created, confirmation-button pointer input, explicit approval exit codes, desktop locking and ownership-preserving registration.
 - Strict Clippy passes on Linux and the Windows GNU target, including all targets/tests.
 - The actual Linux native host accepts native-message frames, reports bridge readiness while the app is closed, rejects a blob URL, launches the GUI confirmation and declines with zero requests to the loopback download server. The actual dialog framebuffer was captured and inspected.
 - Isolated Windows PowerShell registration tests pass against real HKCU test keys: distinct Chrome/Edge origins, ownership refusal, repeat registration and cleanup preserving manual origins/history. Production browser registrations were not changed by tests.
 - Mozilla web-ext validation reports 0 errors, 0 notices and 0 warnings. Firefox 142+ supports the manifest data-consent declaration. Source archives remain unsigned; lint is not signing or approval.
+- 4 packaging/identity tests pass for initial archive inspection/checksums, deterministic ZIPs, separate store configuration preserving development files, and rejection of invalid IDs/private or mismatched keys. Native fixtures check local origins alongside distinct store origins.
 
 Windows application control rejected the new native host with Code Integrity event 3077 under policy `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`. Native Windows beta.5 handoff and installer execution remain unverified. No application-control, antivirus, browser signing or extension policy was disabled or bypassed. Earlier beta.4 Windows results do not establish beta.5 execution.
 

@@ -43,6 +43,33 @@ struct Ids {
     chromium: String,
     firefox: String,
 }
+#[derive(Deserialize)]
+struct StoreIdentity {
+    id: String,
+}
+#[derive(Deserialize)]
+struct StoreIds {
+    chrome: Option<StoreIdentity>,
+    edge: Option<StoreIdentity>,
+}
+fn production_ids(local: &str, config: &str) -> Result<(String, String)> {
+    let stores: StoreIds = serde_json::from_str(config)?;
+    let validate = |identity: Option<StoreIdentity>| -> Result<String> {
+        match identity {
+            None => Ok(local.into()),
+            Some(identity) => {
+                ensure!(
+                    identity.id != local
+                        && identity.id.len() == 32
+                        && identity.id.bytes().all(|c| (b'a'..=b'p').contains(&c)),
+                    "Invalid production extension ID; preserve the local development identity"
+                );
+                Ok(identity.id)
+            }
+        }
+    };
+    Ok((validate(stores.chrome)?, validate(stores.edge)?))
+}
 pub fn chromium_id() -> String {
     serde_json::from_str::<Ids>(include_str!("../../../extensions/local-ids.json"))
         .expect("bundled extension IDs")
@@ -70,6 +97,28 @@ pub fn package_root() -> Result<PathBuf> {
 
 pub fn extension_folder(browser: Browser) -> Result<PathBuf> {
     Ok(package_root()?.join("extensions").join(browser.folder()))
+}
+
+pub fn browser_components_warning() -> Option<String> {
+    component_warning_at(std::env::current_exe().ok()?.parent()?)
+}
+fn component_warning_at(directory: &Path) -> Option<String> {
+    if !directory
+        .join("extensions/chromium/manifest.json")
+        .is_file()
+    {
+        return None;
+    }
+    let metadata = std::fs::read_to_string(directory.join("BUILD.txt")).unwrap_or_default();
+    if metadata
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        == Some(env!("CARGO_PKG_VERSION"))
+    {
+        return None;
+    }
+    Some("The desktop was updated, but its browser components need the matching full setup package. Automatic handoff may be unavailable until the native host and extensions are updated.".into())
 }
 
 pub fn register_local() -> Result<()> {
@@ -109,12 +158,16 @@ pub fn register_local() -> Result<()> {
         "The browser host needs updating. Install the full setup package rather than updating only the desktop executable"
     );
     let ids: Ids = serde_json::from_str(include_str!("../../../extensions/local-ids.json"))?;
+    let (chrome, edge) = production_ids(
+        &ids.chromium,
+        include_str!("../../../extensions/store-ids.json"),
+    )?;
     #[cfg(windows)]
     {
         crate::browser_windows::register(
             &crate::state_dir(),
             &binary,
-            &ids.chromium,
+            &[ids.chromium.clone(), chrome, edge],
             &ids.firefox,
         )?;
     }
@@ -125,9 +178,9 @@ pub fn register_local() -> Result<()> {
             &Paths::current()?,
             &binary,
             std::collections::BTreeMap::from([
-                (Registered::Chrome, ids.chromium.clone()),
+                (Registered::Chrome, chrome),
                 (Registered::Chromium, ids.chromium.clone()),
-                (Registered::Edge, ids.chromium),
+                (Registered::Edge, edge),
                 (Registered::Firefox, ids.firefox),
             ]),
         )?;
@@ -376,6 +429,41 @@ pub fn confirmation_if_requested() -> Option<Result<bool>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn desktop_only_upgrade_cannot_silently_keep_older_browser_components() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(component_warning_at(dir.path()).is_none());
+        std::fs::create_dir_all(dir.path().join("extensions/chromium")).unwrap();
+        std::fs::write(dir.path().join("extensions/chromium/manifest.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("BUILD.txt"), "StrataFetch 0.1.0-beta.4\n").unwrap();
+        assert!(component_warning_at(dir.path()).is_some());
+        std::fs::write(
+            dir.path().join("BUILD.txt"),
+            concat!("StrataFetch ", env!("CARGO_PKG_VERSION"), "\n"),
+        )
+        .unwrap();
+        assert!(component_warning_at(dir.path()).is_none());
+    }
+    #[test]
+    fn production_ids_are_separate_and_local_ids_survive() {
+        let local = "a".repeat(32);
+        let chrome = "b".repeat(32);
+        let edge = "c".repeat(32);
+        assert_eq!(
+            production_ids(&local, r#"{"chrome":null,"edge":null}"#).unwrap(),
+            (local.clone(), local.clone())
+        );
+        let config = serde_json::json!({"chrome":{"id":chrome},"edge":{"id":edge}}).to_string();
+        assert_eq!(production_ids(&local, &config).unwrap(), (chrome, edge));
+        assert!(
+            production_ids(
+                &local,
+                &serde_json::json!({"chrome":{"id":local},"edge":null}).to_string()
+            )
+            .is_err()
+        );
+        assert!(production_ids(&local, r#"{"chrome":{"id":"invalid"},"edge":null}"#).is_err());
+    }
     #[test]
     fn only_explicit_confirmation_counts_as_approval() {
         assert!(confirmation_result(Some(CONFIRM_ACCEPTED)).unwrap());

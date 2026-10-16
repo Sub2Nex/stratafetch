@@ -9,6 +9,7 @@
 - Render confirmation in a focused StrataFetch window without an optional Linux message-dialog utility. Reject ordinary/older desktop exit codes as approval.
 - Bundle stable local Chromium IDs, source ZIPs and store-upload ZIPs with icons and Firefox data declarations. Store signing/listings remain pending; local approval and Firefox temporary-loading limits remain explicit.
 - Preserve unrelated native origins during register/unregister and reject mismatched companion components after desktop-only updates.
+- Add optional domain exclusions, separate Chrome/Edge production-ID configuration, a dedicated Edge upload ZIP, unsigned Firefox development XPI, and a startup notice for older installed browser components.
 
 ## 0.1.0-beta.4 — 2026-10-16
 
