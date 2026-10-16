@@ -60,6 +60,9 @@ def verify(path):
         rva, size = struct.unpack_from("<II", data, root + entry)
         start = offset(rva, size)
         xml = ET.fromstring(data[start:start + size])
+        definition = xml.find("{urn:schemas-microsoft-com:asm.v1}assemblyIdentity")
+        if definition is None or definition.get("processorArchitecture") == "*":
+            raise ValueError("Invalid application definition identity")
         identities = [node for node in xml.iter() if node.tag.endswith("}assemblyIdentity")]
         if not any(node.get("name") == "Microsoft.Windows.Common-Controls"
                    and node.get("version") == "6.0.0.0"
