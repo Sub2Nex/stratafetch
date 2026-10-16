@@ -1,33 +1,20 @@
-# StrataFetch v0.1.0-beta.1 — first public testing beta
+# StrataFetch v0.1.0-beta.2 — desktop updates (source only)
 
-Beta for the download engine and Linux desktop, with an unsigned Windows x64 cross-build preview. This release fixes 18 reproduced alpha.4 defects and upgrades Rustls for four newly published security advisories. Stable and full platform acceptance remain open. All validation and packaging are local; GitHub Actions and hosted runners remain disabled.
+This release contains the updater source changes. **There are no beta.2 executable downloads.** Windows application control prevented the Rust build from completing (OS error 4551), so compilation, regression tests and an actual upgrade cycle remain unverified. This is a development beta, not a validated stable release.
 
-## Fixes
+## Added
 
-- Preserve an immediate Resume after Pause, retain queue priority when setting a CLI rate limit, and cancel pending resume requests when paused again.
-- Decode CLI/browser URL filenames; bound Unicode names by bytes; preserve short extensions; escape additional Windows device aliases.
-- Retry transient initial HTTP probes and interrupt retry/hash waits when paused.
-- Reject oversized URLs before creating records that exceed IPC limits.
-- Make exported histories importable above 1,000 entries with a shared 10,000-entry/8 MiB limit; normalize Unicode labels; publish private exports without overwriting files.
-- Restrict Unix database/sidecar permissions and refuse database symlink aliases that bypass profile locking.
-- Preserve native messaging through interrupted reads and deliver worker events without dropping metadata/folder results.
-- Prevent late browser replies from replacing current errors, and handle action-badge failures without losing native handoff results.
-- Show actual single-stream resumability/progress and ignore stale native chooser/metadata results from old forms.
-- Upgrade Rustls to 0.23.46 for RUSTSEC-2026-0346, 0347, 0348 and 0349.
+- Tools → Check for updates, with automatic checks on startup and every 24 hours while open.
+- A saved setting to disable automatic checks.
+- Windows x64 desktop update downloads with SHA-256 verification and an explicit Restart and install action.
+- A helper that waits for normal shutdown, retains the previous executable and restores it if replacement or launch fails.
+- Version/channel selection: stable builds ignore previews; preview builds can receive newer previews and stable releases.
+- Update packaging instructions, privacy documentation and five regression tests covering version selection, checksum parsing, asset URL restrictions and replacement/recovery.
 
-## Downloads
+## Downloads and limitations
 
-- **stratafetch-desktop.exe**: standalone Windows x64 desktop preview. Portable, not an installer.
-- **stratafetch-windows-x64.zip**: matching Windows desktop, CLI, native host, extensions, documentation and dependency notices. GNU cross-compiled on Linux; not executed on Windows.
-- **stratafetch-linux-x64.tar.gz**: verified Debian 13 x64 desktop/CLI/native-host package. Requires GLIBC_2.39 and an X11/Wayland session with a supported Vulkan driver.
-- **SHA256SUMS**: hashes for all executable/archive assets above.
+GitHub's source ZIP and tarball contain the new code. They are not runnable application packages. Existing [beta.1 application downloads](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.1) remain available separately and do not contain the updater. No previous-version binary is attached or relabeled as beta.2.
 
-No macOS/ARM64 binary or installer is included. macOS source integration and app packaging are prepared; native build/runtime acceptance requires Apple's SDK. Binaries are unsigned.
+The in-app installer targets Windows x64 desktop executables. CLI, browser integration and other platforms require the full package or release downloads. Existing installations will need one manual upgrade to obtain an updater-enabled binary when one is available. Future compatible releases must include `stratafetch-desktop.exe` and `SHA256SUMS` and preserve the update helper protocol.
 
-## Evidence and limits
-
-All 79 Rust tests and 18 browser-script checks pass, including the new regressions. Formatting, strict Clippy, dependency advisories/licenses/sources, release CLI/native-host exact-byte/SHA-256 downloads and rejection of an untrusted HTTPS certificate pass. Native Linux rendering is validated with X11 and Wayland using software Vulkan. Archive executable bytes, source metadata and uploaded asset hashes are verified before publication.
-
-Installed Chromium testing was blocked by this environment's administrator policy forbidding unpacked extensions. That failed attempt is documented, not counted as acceptance. Browser integration remains experimental. Native Windows/Mac execution, physical GPUs, installed browsers, full folder-selection acceptance, accessibility/DPI transitions, sleep/resume, signing and different-user Windows IPC checks remain pending. See [the beta audit](https://github.com/Sub2Nex/stratafetch/blob/v0.1.0-beta.1/docs/BETA-AUDIT.md) for every fix, regression and limitation.
-
-Back up profiles and close old desktop/service instances before upgrading all three executables together. Schema 2 is preserved; interrupted jobs remain paused. Re-register the native host if its permanent path changes. Completed files are never automatically executed. Exports contain URLs and may contain private query parameters.
+Formatting and whitespace checks passed. Build, Clippy, tests, native UI and update/recovery checks must pass on an allowed build machine before binary distribution. Checksums detect corruption; they are not independent publisher signatures. No GitHub Actions workflows or hosted build resources were enabled.

@@ -27,6 +27,8 @@ The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open
 
 ## Updates
 
+The newest source version is [v0.1.0-beta.2](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.2), containing the updater changes. It has no application binaries: Windows application control blocked build validation. The beta.1 executable downloads below remain the previous version and do not contain this feature.
+
 The desktop supports automatic update checks and **Tools → Check for updates…**. Windows x64 users can download, verify and install desktop updates with a restart. Automatic checks can be disabled in Settings → General. See [update behavior and release packaging](docs/UPDATES.md).
 
 ## CLI
