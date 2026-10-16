@@ -4,7 +4,7 @@
 
 - Desktop: automatic GitHub release checks, a manual Tools → Check for updates action, and a saved preference to disable automatic checks.
 - Windows x64: download and verify a desktop update against release SHA-256 checksums, then install with graceful shutdown, restart and rollback if replacement fails. Other platforms link to the release downloads.
-- Source changes only: compilation and runtime verification are blocked by Windows application control (OS error 4551). No beta.2 executable is available from this environment.
+- Publish unsigned Windows x64 EXE/ZIP assets cross-built locally in Ubuntu WSL2. All 84 Rust tests, strict Clippy and 19 browser/CLI/native-host checks pass on Linux; the Linux settings window renders with the update preference. Native Windows execution and the full update/restart cycle remain unverified. No CI or Actions are used.
 
 ## 0.1.0-beta.1 — 2026-10-14
 

@@ -27,7 +27,7 @@ The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open
 
 ## Updates
 
-The newest source version is [v0.1.0-beta.2](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.2), containing the updater changes. It has no application binaries: Windows application control blocked build validation. The beta.1 executable downloads below remain the previous version and do not contain this feature.
+Download [v0.1.0-beta.2](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.2) with the updater: [Windows desktop EXE](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.2/stratafetch-desktop.exe), [Windows portable ZIP](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.2/stratafetch-windows-x64.zip), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.2/SHA256SUMS). These unsigned Windows x64 binaries were cross-built locally in Ubuntu WSL2. All 84 Rust tests and strict Clippy passed on Linux; native Windows execution and the full update/restart cycle remain unverified. Existing users need this one manual upgrade to obtain the updater. Beta.1 downloads below remain available for the previous version, including Linux.
 
 The desktop supports automatic update checks and **Tools → Check for updates…**. Windows x64 users can download, verify and install desktop updates with a restart. Automatic checks can be disabled in Settings → General. See [update behavior and release packaging](docs/UPDATES.md).
 
