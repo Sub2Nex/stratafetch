@@ -1,5 +1,17 @@
 # Codex continuation — 2026-10-16
 
+## Current investigation — extension 0.2.3
+
+The user's latest live popup says: "Checking browser download: The browser did not confirm its pause in time. Keeping the download in your browser." This is before native confirmation. A successful native ping does not establish browser capture functionality. Chromium HEAD DownloadItemImpl::Pause sets paused_ synchronously in active/target-pending states; there is no evidence yet that merely increasing the timeout solves this case. Do not claim its actual cause or live fix is proven.
+
+Implemented: observe newly created downloads until filename metadata exists, reconsider onChanged events (including changes during an in-flight inspection), persist short-lived candidate identity fingerprints across worker restarts, and prevent duplicate prompts after decline/resume. Retain the strict confirmed-pause requirement. Failed native rollback now retains the browser pause and recovery record instead of resuming a potentially duplicate copy. After cancel resolves, verify the browser actually stopped before reporting success. Popup Download handoff details shows latest 20 local state transitions, including pause requests, observed pause changes and failed pause snapshots. Entries have no URL/name/path; privacy documentation covers these and temporary candidate URL fingerprints.
+
+Validation: 165 JS tests, four archive/identity tests, Firefox lint zero errors/notices/warnings. Artifacts: D:/stratafetch-main/dist/browser-upload-0.2.3. Applied background.js/popup.js/popup.html reversibly to existing installed Chromium/Firefox folders using .smoke/browser-repair/install-diagnostics.py; manifest remains 0.2.0 to match installed beta.6 native compatibility checks, ID/key/registration preserved. User must Reload the existing Chrome extension. Do not load another unpacked folder or replace the installed manifest without a matching full package build.
+
+Real Chrome verification remains outstanding. Native computer-use previously stopped because it could not verify the Chrome URL; no bypass was attempted. CUA browser inventory has Edge but no Chrome. Existing user downloads and pending Ubuntu confirmation were not accepted/cancelled. Native acknowledgment lost on port disconnect remains a protocol limitation; no request-token reconciliation has been implemented. beta.6 draft assets remain unchanged.
+
+Next three tasks: (1) obtain one fresh capture's Download handoff details after Reload and establish whether pause never appeared or was reversed; (2) verify one accepted small-file browser handoff, cancellation and output hash using legitimate Chrome access; (3) implement request-token reconciliation with matched native builds before claiming crash-safe at-most-one transfer behavior. Checks: node --test scripts/browser-tests.mjs; Python scripts/test-extension-packaging.py; Python packaging/package-extensions.py --output D:/stratafetch-main/dist/browser-upload-0.2.3; existing WSL web-ext lint. Real repo is .publish; root is a synchronized copy. No CI/Actions or security-policy changes.
+
 ## Current fix — extension 0.2.2
 
 User supplied the real popup failure: "Checking browser download: Browser download changed before handoff", with no confirmation shown and native connection reporting Connected. This pinpoints the pre-native state guard but does not identify which of its combined predicates failed on the live browser.

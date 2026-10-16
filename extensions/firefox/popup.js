@@ -16,9 +16,11 @@ capture.onchange = async () => {
   try { await api.storage.local.set({ capture: capture.checked }); }
   catch { status.textContent = "Cannot save download-capture preference."; }
 };
-api.storage.local.get({ capture: true, excludedDomains: [], lastHandoffError: null }).then(settings => {
+api.storage.local.get({ capture: true, excludedDomains: [], lastHandoffError: null, handoffEvents: [] }).then(settings => {
   capture.checked = settings.capture;
   excluded.value = (settings.excludedDomains || []).join("\n");
+  const details = document.getElementById("handoff-events");
+  if (details) details.textContent = JSON.stringify(settings.handoffEvents || [], null, 2);
   const issue = document.getElementById("last-issue");
   if (issue && settings.lastHandoffError?.message) issue.textContent = "Last handoff issue: " + settings.lastHandoffError.message;
 }).catch(() => { status.textContent = "Cannot read capture preference."; });

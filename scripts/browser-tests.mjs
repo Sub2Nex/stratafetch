@@ -2,12 +2,16 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {createHash} from 'node:crypto';
+import {createHash,webcrypto} from 'node:crypto';
 const read = (folder,file) => readFileSync(new URL('../extensions/'+folder+'/'+file,import.meta.url),'utf8');
 function background(folder, options={}) {
   const calls=[], hooks={}, stored={...(options.stored || {})};
   let enabled=options.enabled ?? true;
   const item={id:7,url:'https://example.org/file.zip',filename:'C:\\Downloads\\file.zip',state:'in_progress',startTime:'2026-10-16T12:00:00Z',danger:'safe',totalBytes:100,mime:'application/zip',...options.item};
+  for (const value of (options.items || [])) {
+    if (value.filename === undefined) value.filename = 'file.zip';
+    if (value.mime === undefined) value.mime = 'application/zip';
+  }
   const items = new Map([item, ...(options.items || [])].map(value => [value.id, value]));
   const searches = new Map();
   const api={
@@ -20,17 +24,95 @@ function background(folder, options={}) {
     contextMenus:{async removeAll(){},create(value){calls.push({op:'menu',value});},onClicked:{addListener(fn){hooks.clicked=fn;}}},
     downloads:{
       onCreated:{addListener(fn){hooks.created=fn;}},
+      onChanged:{addListener(fn){hooks.changed=fn;}},
       async pause(id){calls.push({op:'pause',id});if(options.pauseError)throw Error('pause failed');items.get(id).paused=true;},
       async search({id}){calls.push({op:'search',id});const count=(searches.get(id)||0)+1;searches.set(id,count);const changes=typeof options.searchItem==='function'?options.searchItem(id,count):options.searchItem;return items.has(id)?[{...items.get(id),...changes}]:[];},
       async resume(id){calls.push({op:'resume',id});if(options.resumeError)throw Error('resume failed');items.get(id).paused=false;},
-      async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');items.get(id).state='interrupted';},
+      async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');if(!options.cancelNoEffect)items.get(id).state='interrupted';},
     },
     action:Object.fromEntries(['setBadgeText','setBadgeBackgroundColor','setTitle'].map(name=>[name,async value=>{calls.push({op:name,...value});if(options.badgeError)throw Error('badge failed');}])),
   };
-  runInNewContext(read(folder,'background.js'),{URL,setTimeout,[folder==='firefox'?'browser':'chrome']:api});
+  runInNewContext(read(folder,'background.js'),{URL,setTimeout,crypto:webcrypto,TextEncoder,[folder==='firefox'?'browser':'chrome']:api});
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
+  test(folder+': waits for target metadata then handles concurrent changes once',async()=>{
+    const b=background(folder,{item:{filename:'',mime:''}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.some(c=>c.op==='pause'),false);
+    assert(b.stored.capture_candidate_7);
+    b.item.filename='file.zip';
+    await Promise.all([b.hooks.changed({id:7}),b.hooks.changed({id:7})]);
+    await b.hooks.changed({id:7});
+    assert.equal(b.calls.filter(c=>c.payload?.action==='capture').length,1);
+    assert.equal(b.calls.find(c=>c.payload?.action==='capture').payload.mime,undefined);
+    assert.equal('capture_candidate_7' in b.stored,false);
+  });
+  test(folder+': persisted metadata candidate survives worker restart without raw URLs',async()=>{
+    const first=background(folder,{item:{filename:''}});
+    await first.hooks.created(first.item);
+    const record=first.stored.capture_candidate_7;
+    assert.equal(record.urlHash,createHash('sha256').update(first.item.url).digest('hex'));
+    assert.equal(JSON.stringify(record).includes('example.org'),false);
+    const next=background(folder,{stored:{capture_candidate_7:record}});
+    await next.hooks.changed({id:7});
+    assert.equal(next.calls.filter(c=>c.payload?.action==='capture').length,1);
+  });
+  test(folder+': decline is not recaptured by resume notifications',async()=>{
+    const b=background(folder,{native:async()=>({ok:false,declined:true})});
+    await b.hooks.created(b.item);
+    await b.hooks.changed({id:7,paused:{current:false}});
+    await b.hooks.created(b.item);
+    assert.equal(b.calls.filter(c=>c.payload?.action==='capture').length,1);
+    assert.equal(b.item.paused,false);
+  });
+  for(const kind of ['expired','private','url-substitution','unsafe']) {
+    test(folder+': pending metadata rejects '+kind,async()=>{
+      const b=background(folder,{item:{filename:''}});
+      await b.hooks.created(b.item);
+      if(kind==='expired')b.stored.capture_candidate_7.observedAt=0;
+      if(kind==='private')b.item.incognito=true;
+      if(kind==='url-substitution')b.item.url='https://other.example.org/file.zip';
+      if(kind==='unsafe')b.item.danger='dangerous';
+      b.item.filename='file.zip';
+      await b.hooks.changed({id:7});
+      assert.equal(b.calls.some(c=>c.op==='pause'||c.op==='native'),false);
+    });
+  }
+  test(folder+': unconfirmed native rollback preserves pause and recovery record',async()=>{
+    let rollbackFails=true;
+    const b=background(folder,{cancelError:true,native:async p=>p.action==='capture'?{ok:true,download:{id:'native-id'}}:{ok:!rollbackFails}});
+    await b.hooks.created(b.item);
+    assert.equal(b.item.paused,true);
+    assert.equal(b.stored.capture_pending_7.nativeId,'native-id');
+    await b.hooks.startup();
+    assert.equal(b.calls.some(c=>c.op==='resume'),false);
+    assert.equal(b.stored.capture_pending_7.nativeId,'native-id');
+    rollbackFails=false;
+    await b.hooks.startup();
+    assert.equal(b.item.paused,false);
+    assert.equal('capture_pending_7' in b.stored,false);
+  });
+  test(folder+': resolved cancellation that leaves Chrome active rolls back before resume',async()=>{
+    const b=background(folder,{cancelNoEffect:true});
+    await b.hooks.created(b.item);
+    const rollback=b.calls.findIndex(c=>c.payload?.action==='cancel');
+    assert(rollback>=0);
+    assert(b.calls.findIndex(c=>c.op==='resume')>rollback);
+    assert.match(b.stored.lastHandoffError.message,/cancellation was not confirmed/);
+  });
+  test(folder+': bounded local state trace links acknowledgment to browser cancellation',async()=>{
+    const b=background(folder,{stored:{handoffEvents:Array.from({length:20},()=>({event:'old'}))}});
+    await b.hooks.created(b.item);
+    for(let i=0;i<30;i++)await new Promise(r=>setImmediate(r));
+    const events=b.stored.handoffEvents;
+    assert.equal(events.length,20);
+    const ack=events.find(e=>e.event==='native_acknowledged');
+    const cancelled=events.find(e=>e.event==='browser_cancelled');
+    assert.equal(ack.downloadId,cancelled.downloadId);
+    assert.equal(ack.nativeId,cancelled.nativeId);
+    assert.equal(/example.org|file.zip|Downloads/.test(JSON.stringify(events)),false);
+  });
   for (const startTime of ['2026-10-16T14:00:00+02:00','2026-10-16T12:00:00.500Z','2026-10-16T11:59:59.500Z']) {
     test(folder+': Chrome timestamp updates do not reject the same live download '+startTime,async()=>{
       let record;
@@ -57,7 +139,7 @@ for(const folder of ['chromium','firefox']) {
     assert.match(b.stored.lastHandoffError.message,/did not confirm its pause/);
   });
   test(folder+': manual resume after confirmed pause prevents native handoff',async()=>{
-    const b=background(folder,{searchItem:(_id,count)=>count>=2?{paused:false}:{}});
+    const b=background(folder,{searchItem:(_id,count)=>count>=3?{paused:false}:{}});
     await b.hooks.created(b.item);
     assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
     assert.equal(b.calls.filter(c=>c.op==='pause').length,1);
@@ -132,9 +214,9 @@ for(const folder of ['chromium','firefox']) {
   }
   test(folder+': browser is cancelled only after native acknowledgement',async()=>{
     const b=background(folder);await b.hooks.created(b.item);
-    assert.equal(b.calls.findIndex(c=>c.op==='pause'),0);
+    assert(b.calls.findIndex(c=>c.op==='pause')>=0);
     const native=b.calls.findIndex(c=>c.op==='native');
-    assert(native>0);assert(b.calls.findIndex(c=>c.op==='cancel')>native);
+    assert(native>b.calls.findIndex(c=>c.op==='pause'));assert(b.calls.findIndex(c=>c.op==='cancel')>native);
     assert.equal(b.calls.some(c=>c.op==='resume'),false);
     const payload=b.calls[native].payload;
     assert.deepEqual(Object.keys(payload).sort(),['action','mime','name','size','url']);
@@ -155,7 +237,7 @@ for(const folder of ['chromium','firefox']) {
       });
       await b.hooks.created(b.item);
       if(failure==='badge')assert.equal(b.calls.some(c=>c.op==='cancel'),true);
-      else if(failure==='pause')assert.equal(b.calls.some(c=>c.op==='native'),false);
+      else if(failure==='pause'||failure==='changed')assert.equal(b.calls.some(c=>c.op==='native'),false);
       else {
         assert.equal(b.calls.some(c=>c.op==='resume'),true);
         if(failure==='cancel')assert.equal(b.calls.some(c=>c.payload?.action==='cancel'),true);
@@ -173,7 +255,7 @@ for(const folder of ['chromium','firefox']) {
   test(folder+': duplicate events cannot create duplicate native transfers',async()=>{
     let reply;const b=background(folder,{native:()=>new Promise(resolve=>{reply=resolve;})});
     const pending=b.hooks.created(b.item);
-    while(!reply)await Promise.resolve();
+    while(!reply)await new Promise(resolve=>setImmediate(resolve));
     await b.hooks.created(b.item);
     assert.equal(b.calls.filter(c=>c.op==='native').length,1);
     assert.equal(b.calls.some(c=>c.op==='cancel'),false);
@@ -187,7 +269,7 @@ for(const folder of ['chromium','firefox']) {
       postMessage(){},disconnect(){closed=true;disconnect();}
     });
     const pending=b.hooks.created(b.item);
-    while(!message)await Promise.resolve();
+    while(!message)await new Promise(resolve=>setImmediate(resolve));
     assert.equal(closed,false);assert.equal(b.calls.some(c=>c.op==='cancel'),false);
     message({ok:false,declined:true});await pending;
     assert.equal(closed,true);assert.equal(b.calls.some(c=>c.op==='resume'),true);
@@ -205,7 +287,7 @@ for(const folder of ['chromium','firefox']) {
       const api={runtime:{async sendMessage(){return {ok:true,active:0};}},storage:{local:{async get(){return {capture:true};},async set(){}}},
         tabs:{async query(){if(result==='error')throw Error();return result==='empty'?[]:[{id:1}];}}};
       runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
-      await Promise.resolve();await elements.current.onclick();
+      await new Promise(resolve=>setImmediate(resolve));await elements.current.onclick();
       assert.equal(elements.url.value,'');assert.match(elements.status.textContent,/cannot read.*paste/i);
     });
   }
@@ -214,7 +296,7 @@ for(const folder of ['chromium','firefox']) {
     const api={runtime:{sendMessage(){return new Promise(resolve=>{ping=resolve;});}},
       storage:{local:{async get(){return {capture:false};},async set(){}}},tabs:{async query(){throw Error();}}};
     runInNewContext(read(folder,'popup.js'),{URL,[folder==='firefox'?'browser':'chrome']:api,document:{getElementById:id=>elements[id]}});
-    await elements.current.onclick();const error=elements.status.textContent;ping({ok:true,active:0});await Promise.resolve();await Promise.resolve();
+    await elements.current.onclick();const error=elements.status.textContent;ping({ok:true,active:0});await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));
     assert.equal(elements.status.textContent,error);
   });
 }
@@ -234,9 +316,9 @@ for (const folder of ['chromium','firefox']) {
     const kept=b.hooks.message({action:'capture',url:'https://example.org/file.zip'},{},()=>{throw Error('popup closed');});
     assert.equal(kept,true);
     assert.equal(b.hooks.message({action:'unknown'},{},()=>{}),false);
-    while(!finish)await Promise.resolve();
+    while(!finish)await new Promise(resolve=>setImmediate(resolve));
     finish({ok:true,download:{id:'native-id'}});
-    await Promise.resolve();await Promise.resolve();
+    await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));
   });
 }
 
@@ -256,7 +338,7 @@ for (const folder of ['chromium','firefox']) {
     const next={id:8,url:'https://second.example.org/file.zip',state:'in_progress',startTime:'second'};
     let finish;const b=background(folder,{items:[next],native:()=>new Promise(resolve=>{finish=resolve;})});
     const first=b.hooks.created(b.item),second=b.hooks.created(next);
-    while(!finish)await Promise.resolve();
+    while(!finish)await new Promise(resolve=>setImmediate(resolve));
     await b.api.storage.local.set({excludedDomains:['second.example.org']});
     finish({ok:false,declined:true});await Promise.all([first,second]);
     assert.equal(b.calls.filter(call=>call.op==='native').length,1);
@@ -280,11 +362,11 @@ for (const folder of ['chromium','firefox']) {
     const finishes=[];
     const b=background(folder,{items:[next],native:()=>new Promise(resolve=>finishes.push(resolve))});
     const first=b.hooks.created(b.item), second=b.hooks.created(next);
-    while(!finishes.length)await Promise.resolve();
+    while(!finishes.length)await new Promise(resolve=>setImmediate(resolve));
     assert.equal(b.calls.filter(call=>call.op==='pause').length,2);
     assert.equal(finishes.length,1);
     finishes[0]({ok:false,declined:true});
-    while(finishes.length<2)await Promise.resolve();
+    while(finishes.length<2)await new Promise(resolve=>setImmediate(resolve));
     finishes[1]({ok:false,declined:true});await Promise.all([first,second]);
     assert.equal(b.calls.filter(call=>call.op==='resume').length,2);
   });
@@ -292,7 +374,7 @@ for (const folder of ['chromium','firefox']) {
     const next={id:8,url:'https://example.org/second.zip',state:'in_progress',startTime:'second'};
     let finish;const b=background(folder,{items:[next],native:()=>new Promise(resolve=>{finish=resolve;})});
     const first=b.hooks.created(b.item),second=b.hooks.created(next);
-    while(!finish)await Promise.resolve();
+    while(!finish)await new Promise(resolve=>setImmediate(resolve));
     next.state='interrupted';finish({ok:false,declined:true});await Promise.all([first,second]);
     assert.equal(b.calls.filter(call=>call.op==='native').length,1);
     assert.equal(b.calls.some(call=>call.op==='resume'&&call.id===8),false);
