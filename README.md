@@ -88,7 +88,7 @@ This compares documented scope, not independently tested speed, reliability, or 
 
 ## Platforms and downloads
 
-Current releases include a Windows setup installer and Linux x64 archive built on Ubuntu 24.04 (GLIBC_2.39). Windows executables are built locally in WSL; beta.5 native execution is blocked by this build machine's application-control policy. Linux desktop/download checks are local; macOS and ARM64 binaries are not published. All Windows binaries remain unsigned. See the current release notes for exact verification.
+Current releases include a Windows setup installer and Linux x64 archive built on Ubuntu 24.04 (GLIBC_2.39). Windows executables are built locally in WSL; 91 native Windows tests and real native-host checks pass for beta.5. Linux desktop/download checks are local; macOS and ARM64 binaries are not published. All Windows binaries remain unsigned. See the current release notes for exact verification and remaining installed-browser checks.
 
 Earlier previews and their historical limitations remain in the GitHub release archive.
 

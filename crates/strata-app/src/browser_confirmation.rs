@@ -94,6 +94,10 @@ impl eframe::App for Confirmation {
 impl Confirmation {
     fn draw(&mut self, root: &mut egui::Ui) -> [egui::Rect; 2] {
         let ctx = root.ctx().clone();
+        // Windows can report a theme change after the creation callback. Keep
+        // this frame's root dark too, so white text cannot inherit a light panel.
+        ctx.set_visuals(egui::Visuals::dark());
+        root.style_mut().visuals = egui::Visuals::dark();
         let buttons = egui::CentralPanel::default()
             .show(root, |ui| {
                 ui.add_space(10.0);
