@@ -1,5 +1,13 @@
 # Windows packages
 
+## Current beta.3 setup installer
+
+Download `stratafetch-windows-x64-setup.exe` from the beta.3 release and open it to launch the setup wizard. Choose a destination and optional Start Menu shortcuts, then use the finish-page checkbox to launch StrataFetch. The default location is `%LOCALAPPDATA%\Programs\StrataFetch`, and installation is per-user without administrator access. Windows Installed Apps and the Start Menu uninstall shortcut can remove it. Profiles, completed downloads and unrelated files are preserved. Close the desktop/service before upgrades or removal.
+
+The versioned NSIS build takes its application/version metadata from Cargo.toml and installs the same verified beta.3 desktop/CLI/browser-host binaries. `python packaging/build-installer.py --package PATH --output PATH` can build locally with NSIS on Linux or Windows; `build-installer.ps1` is the Windows wrapper. Python 3.11+ is required for installer builds. The earlier installer sections below describe historical alpha behavior and evidence.
+
+Native beta.3 verification passed: the production wizard reached its completion page, and installed executable hashes and the Windows app version match the release. An isolated build with separate registration/shortcut names passed install, reinstall and uninstall, removed all product files/registration/shortcuts, preserved an unrelated sentinel file, and left existing StrataFetch Start Menu contents unchanged. Installer packaging was added after the original beta.3 tag; current packaging source is on `main`, while the application binaries remain the verified beta.3 build.
+
 StrataFetch is an unsigned development preview. Public source: https://github.com/Sub2Nex/stratafetch. The unsigned Windows alpha remains experimental; see RELEASE-NOTES.md for its limits.
 
 ## Portable ZIP

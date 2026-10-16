@@ -4,12 +4,13 @@ Fixes the beta.2 Windows launch failure: “TaskDialogIndirect could not be loca
 
 ## Downloads
 
+- **stratafetch-windows-x64-setup.exe** — recommended Windows download. A per-user installation wizard with destination selection, optional Start Menu shortcuts, a finish-page launch option and an uninstall entry in Windows Installed Apps.
 - **stratafetch-desktop.exe** — fixed standalone Windows x64 desktop.
 - **stratafetch-windows-x64.zip** — matching Windows desktop, CLI, browser host, extensions and documentation.
 - **stratafetch-linux-x64.tar.gz** — native Linux x64 desktop, CLI, browser host and desktop-menu integration. Built locally on Ubuntu 24.04; requires GLIBC_2.39 or newer, X11/Wayland and a compatible Vulkan driver.
-- **SHA256SUMS** — hashes for all three application downloads.
+- **SHA256SUMS** — hashes for the setup installer and all application archives/executables.
 
-Close older StrataFetch processes and replace the old executable or extract the full package into a permanent directory. **The broken beta.2 Windows desktop requires a manual upgrade to beta.3.** Preserve profiles and completed downloads. On Linux, run `./stratafetch-desktop`; optional `./stratafetch install-desktop` adds the per-user application-menu entry.
+On Windows, close older StrataFetch processes and run **stratafetch-windows-x64-setup.exe** to open the installation wizard. It defaults to `%LOCALAPPDATA%\Programs\StrataFetch` and does not request administrator access. Remove it using Windows Installed Apps or its Start Menu uninstall shortcut. **The broken beta.2 Windows desktop requires a manual upgrade to beta.3.** Profiles and completed downloads are kept outside the installation directory. On Linux, extract the archive and run `./stratafetch-desktop`; optional `./stratafetch install-desktop` adds the per-user application-menu entry.
 
 ## Fix and update behavior
 
@@ -20,6 +21,7 @@ Close older StrataFetch processes and replace the old executable or extract the 
 
 ## Verification
 
+- The NSIS setup wizard is verified natively on Windows through its completion page. All three production-installed executable hashes and the registered application version match beta.3. An isolated test variant with separate registry/shortcut names passes install, reinstall and uninstall while preserving unrelated files and existing StrataFetch shortcuts.
 - Windows binaries built locally for `x86_64-pc-windows-gnu` from code commit `c33d784ffafe10c9687137d9c3baa85f076309aa`.
 - The manifest check rejects beta.2 and accepts all three beta.3 Windows executables. The native Windows SDK extracts and validates the embedded desktop manifest.
 - **Native Windows CLI and desktop startup pass.** The real desktop renders settings with fresh isolated state and exits cleanly.

@@ -4,16 +4,37 @@ Unicode true
 !ifndef PACKAGE_DIR
 !define PACKAGE_DIR "..\dist\stratafetch-windows-x64"
 !endif
-Name "StrataFetch (development preview)"
-OutFile "..\dist\stratafetch-windows-x64-setup.exe"
+!ifndef APP_VERSION
+!error "Build with build-installer.py so APP_VERSION is set from Cargo.toml"
+!endif
+!ifndef PRODUCT_VERSION
+!error "PRODUCT_VERSION must be set by the installer build script"
+!endif
+!ifndef OUTPUT_FILE
+!define OUTPUT_FILE "..\dist\stratafetch-windows-x64-setup.exe"
+!endif
+!ifndef UNINSTALL_KEY
+!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch"
+!endif
+!ifndef START_MENU_DIR
+!define START_MENU_DIR "StrataFetch"
+!endif
+!ifndef INSTALLER_FILES
+!define INSTALLER_FILES "installer-files.nsh"
+!endif
+Name "StrataFetch ${APP_VERSION}"
+Caption "StrataFetch ${APP_VERSION} Setup"
+BrandingText "StrataFetch"
+OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\StrataFetch"
+InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-VIProductVersion "0.1.0.0"
+VIProductVersion "${PRODUCT_VERSION}"
 VIAddVersionKey "ProductName" "StrataFetch"
-VIAddVersionKey "ProductVersion" "0.1.0-alpha.3"
-VIAddVersionKey "FileVersion" "0.1.0-alpha.3"
-VIAddVersionKey "FileDescription" "StrataFetch unsigned Windows alpha installer"
+VIAddVersionKey "ProductVersion" "${APP_VERSION}"
+VIAddVersionKey "FileVersion" "${APP_VERSION}"
+VIAddVersionKey "FileDescription" "StrataFetch Windows setup installer"
 VIAddVersionKey "LegalCopyright" "StrataFetch contributors"
 !define MUI_ICON "..\assets\stratafetch.ico"
 !define MUI_UNICON "..\assets\stratafetch.ico"
@@ -23,15 +44,21 @@ VIAddVersionKey "LegalCopyright" "StrataFetch contributors"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_RUN "$INSTDIR\stratafetch-desktop.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch StrataFetch"
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 Function .onInit
+  SetRegView 64
   ${IfNot} ${RunningX64}
     MessageBox MB_OK "StrataFetch requires 64-bit Windows."
     Abort
   ${EndIf}
+FunctionEnd
+Function un.onInit
+  SetRegView 64
 FunctionEnd
 Section "StrataFetch desktop and command line" Core
   SectionIn RO
@@ -45,19 +72,21 @@ Section "StrataFetch desktop and command line" Core
     Abort
   ${EndIf}
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayName" "StrataFetch (development preview)"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "DisplayVersion" "0.1.0-alpha.3"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "URLInfoAbout" "https://github.com/Sub2Nex/stratafetch"
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch" "NoRepair" 1
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "StrataFetch"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\stratafetch-desktop.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/Sub2Nex/stratafetch"
+  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoModify" 1
+  WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
 SectionEnd
 Section "Start Menu shortcuts" Shortcuts
   SetShellVarContext current
-  CreateDirectory "$SMPROGRAMS\StrataFetch"
-  CreateShortcut "$SMPROGRAMS\StrataFetch\StrataFetch.lnk" "$INSTDIR\stratafetch-desktop.exe"
-  CreateShortcut "$SMPROGRAMS\StrataFetch\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\${START_MENU_DIR}"
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\StrataFetch.lnk" "$INSTDIR\stratafetch-desktop.exe"
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 SectionEnd
 Section "Uninstall"
   SetShellVarContext current
@@ -89,11 +118,11 @@ Section "Uninstall"
   Delete "$INSTDIR\ROADMAP.md"
   Delete "$INSTDIR\CHANGELOG.md"
   ; Explicit directory contents are generated below by build-installer.ps1.
-  !include "installer-files.nsh"
+  !include "${INSTALLER_FILES}"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
-  Delete "$SMPROGRAMS\StrataFetch\StrataFetch.lnk"
-  Delete "$SMPROGRAMS\StrataFetch\Uninstall.lnk"
-  RMDir "$SMPROGRAMS\StrataFetch"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\StrataFetch"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\StrataFetch.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\Uninstall.lnk"
+  RMDir "$SMPROGRAMS\${START_MENU_DIR}"
+  DeleteRegKey HKCU "${UNINSTALL_KEY}"
 SectionEnd

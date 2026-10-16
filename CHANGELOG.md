@@ -2,6 +2,8 @@
 
 ## 0.1.0-beta.3 — 2026-10-16
 
+- Add the recommended Windows setup wizard with versioned metadata, per-user installation, optional Start Menu shortcuts, finish-page launch and a Windows uninstall entry. Native install/reinstall/uninstall verification passes without removing unrelated data.
+
 - Fix the Windows `TaskDialogIndirect` entry-point startup failure by embedding the Common Controls v6 application manifest in every executable, for MSVC and GNU builds.
 - Reject Windows packages missing that embedded dependency during packaging.
 - Publish a matching Linux x64 package alongside the Windows downloads.
