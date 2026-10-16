@@ -53,6 +53,22 @@ struct Session {
     downloaded: u64,
 }
 
+impl Session {
+    fn observe(&mut self, job: &Job, now: Instant) {
+        if job.downloaded < self.downloaded {
+            // Restart starts a new measurement window; the old byte baseline
+            // would otherwise hide the average speed until it was surpassed.
+            self.initial = job.downloaded;
+            self.elapsed = 0.0;
+        } else if self.last_status == Status::Downloading {
+            self.elapsed += now.duration_since(self.last).as_secs_f64();
+        }
+        self.last = now;
+        self.last_status = job.status;
+        self.downloaded = job.downloaded;
+    }
+}
+
 pub struct App {
     updater: updates::Updater,
     state: State,
@@ -359,19 +375,11 @@ impl App {
 
             for job in &reply.jobs {
                 if let Some(session) = self.sessions.get_mut(&job.id) {
-                    if session.last_status == Status::Downloading {
-                        session.elapsed += session.last.elapsed().as_secs_f64();
-                    }
-
                     if session.last_status != Status::Completed && job.status == Status::Completed {
                         completions.push((job.id.clone(), name(job)));
                     }
 
-                    session.last = Instant::now();
-
-                    session.last_status = job.status;
-
-                    session.downloaded = job.downloaded;
+                    session.observe(job, Instant::now());
                 } else {
                     self.sessions.insert(
                         job.id.clone(),
@@ -390,6 +398,23 @@ impl App {
                 }
             }
 
+            let existing: std::collections::HashSet<_> =
+                reply.jobs.iter().map(|j| j.id.as_str()).collect();
+            let removed: std::collections::HashSet<_> = self
+                .jobs
+                .iter()
+                .filter(|j| !existing.contains(j.id.as_str()))
+                .map(|j| j.id.as_str())
+                .collect();
+            self.sessions.retain(|id, _| existing.contains(id.as_str()));
+            self.state
+                .prefs
+                .descriptions
+                .retain(|id, _| !removed.contains(id.as_str()));
+            self.state
+                .prefs
+                .completion
+                .retain(|id, _| !removed.contains(id.as_str()));
             self.jobs = reply.jobs;
 
             self.state.selection.retain(&self.jobs);

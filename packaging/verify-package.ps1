@@ -2,7 +2,7 @@ param([switch]$PortableOnly)
 $ErrorActionPreference = 'Stop'
 $workspacePath = Split-Path -Parent $PSScriptRoot
 $manifestText = Get-Content -LiteralPath (Join-Path $workspacePath 'Cargo.toml') -Raw
-if ($manifestText -notmatch '(?m)^version = "([^"]+)"$') { throw 'Cannot determine workspace version' }
+if ($manifestText -notmatch '(?m)^version = "([^"]+)"\r?$') { throw 'Cannot determine workspace version' }
 $expectedVersion = $Matches[1]
 $reportedVersion = & (Join-Path $workspacePath 'target\release\stratafetch.exe') --version
 if ($LASTEXITCODE -ne 0 -or $reportedVersion -ne "stratafetch $expectedVersion") { throw 'CLI binary version differs from workspace; build --bins as well as --examples' }

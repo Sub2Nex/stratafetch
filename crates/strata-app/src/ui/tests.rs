@@ -1,5 +1,31 @@
 use super::{settings, transfer_dialog, ui_state::State};
 use eframe::egui;
+#[test]
+fn restarting_a_transfer_resets_its_average_speed_baseline() {
+    use std::time::{Duration, Instant};
+    let temp = tempfile::tempdir().unwrap();
+    let manager =
+        strata_core::Manager::open(&temp.path().join("state"), Default::default()).unwrap();
+    let mut job = manager
+        .add("https://example.org/file", temp.path(), None)
+        .unwrap();
+    let started = Instant::now();
+    let mut session = super::Session {
+        initial: 10_000,
+        downloaded: 20_000,
+        elapsed: 10.0,
+        last: started,
+        last_status: strata_core::Status::Paused,
+    };
+    job.status = strata_core::Status::Downloading;
+    session.observe(&job, started + Duration::from_secs(1));
+    assert_eq!(session.initial, 0);
+    assert_eq!(session.elapsed, 0.0);
+    job.downloaded = 1024;
+    session.observe(&job, started + Duration::from_secs(2));
+    assert_eq!(session.downloaded - session.initial, 1024);
+    assert_eq!(session.elapsed, 1.0);
+}
 fn has_text(shape: &egui::Shape, needle: &str) -> bool {
     match shape {
         egui::Shape::Text(text) => text.pos.is_finite() && text.galley.job.text.contains(needle),

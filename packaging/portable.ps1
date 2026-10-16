@@ -1,3 +1,4 @@
+param([ValidateSet('x86_64-pc-windows-msvc','x86_64-pc-windows-gnu')][string]$Target = 'x86_64-pc-windows-msvc')
 $ErrorActionPreference = 'Stop'
 $workspacePath = Split-Path -Parent $PSScriptRoot
 python (Join-Path $workspacePath 'scripts/verify-windows-manifest.py') (Join-Path $workspacePath 'target/release/stratafetch.exe') (Join-Path $workspacePath 'target/release/stratafetch-desktop.exe') (Join-Path $workspacePath 'target/release/stratafetch-browser-host.exe')
@@ -13,10 +14,10 @@ if (Test-Path -LiteralPath $resolvedPackagePath) { Remove-Item -LiteralPath $res
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 $sourceCommit = git -C $workspacePath rev-parse HEAD
 $manifestText = Get-Content -LiteralPath (Join-Path $workspacePath 'Cargo.toml') -Raw
-if ($manifestText -notmatch '(?m)^version = "([^"]+)"$') { throw 'Cannot determine workspace version' }
+if ($manifestText -notmatch '(?m)^version = "([^"]+)"\r?$') { throw 'Cannot determine workspace version' }
 $packageVersion = $Matches[1]
 $dirtySource = [bool](git -C $workspacePath status --porcelain --untracked-files=normal)
-@("StrataFetch $packageVersion - unsigned development preview","Source commit: $sourceCommit","Working tree modified: $dirtySource","Target: x86_64-pc-windows-msvc","Unsigned binaries; Windows may block execution. Do not bypass application-control policies.","See docs/PHASE4.md for current evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
+@("StrataFetch $packageVersion - unsigned development preview","Source commit: $sourceCommit","Working tree modified: $dirtySource","Target: $Target","Unsigned binaries; Windows may block execution. Do not bypass application-control policies.","See docs/RELEASE-NOTES.md for current evidence and limitations.") | Set-Content -LiteralPath (Join-Path $packagePath 'BUILD.txt') -Encoding ascii
 foreach ($binaryName in @('stratafetch.exe','stratafetch-desktop.exe','stratafetch-browser-host.exe')) {
     $binaryPath = Join-Path $workspacePath "target\release\$binaryName"
     if (-not (Test-Path -LiteralPath $binaryPath)) {throw "Build release binary first: $binaryName"}

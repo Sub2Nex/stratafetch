@@ -74,6 +74,7 @@ pub struct Worker {
     pub snapshot: Arc<Mutex<Option<Reply>>>,
 
     thread: Option<std::thread::JoinHandle<()>>,
+    stop: tokio::sync::watch::Sender<bool>,
 }
 
 async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: Command) -> Reply {
@@ -122,7 +123,12 @@ fn emit(events: &mpsc::Sender<Event>, ctx: &egui::Context, event: Event) {
 
 impl Worker {
     pub fn new(ctx: egui::Context) -> Self {
+        Self::in_directory(ctx, state_dir())
+    }
+
+    fn in_directory(ctx: egui::Context, directory: PathBuf) -> Self {
         let (commands, mut requests) = tokio::sync::mpsc::channel(64);
+        let (stop, mut stopping) = tokio::sync::watch::channel(false);
 
         let (events, receiver) = mpsc::channel();
 
@@ -134,8 +140,6 @@ impl Worker {
             let runtime = tokio::runtime::Runtime::new().expect("Tokio runtime");
 
             runtime.block_on(async move {
-                let directory = state_dir();
-
                 let manager = match Manager::open(&directory, Options::default()) {
                     Ok(manager) => Some(manager),
 
@@ -216,7 +220,18 @@ impl Worker {
                     (task, generation)
                 };
 
-                while let Some(request) = requests.recv().await {
+                loop {
+                    let request = tokio::select! {
+                        biased;
+                        _ = stopping.changed() => break,
+                        request = requests.recv() => match request {
+                            Some(request) => request,
+                            None => break,
+                        },
+                    };
+                    if *stopping.borrow() {
+                        break;
+                    }
                     if !matches!(
                         request,
                         Request::Probe { .. } | Request::ChooseFolder { .. }
@@ -297,7 +312,7 @@ impl Worker {
                         Request::Sequence(commands) => {
                             let mut reply = call(manager.as_ref(), &directory, Command::List).await;
                             for command in commands {
-                                if reply.error.is_some() {
+                                if reply.error.is_some() || *stopping.borrow() {
                                     break;
                                 }
                                 reply = call(manager.as_ref(), &directory, command).await;
@@ -346,7 +361,7 @@ impl Worker {
                                     },
                                 );
 
-                                if start {
+                                if start && !*stopping.borrow() {
                                     reply =
                                         call(manager.as_ref(), &directory, Command::Start { id })
                                             .await;
@@ -387,10 +402,14 @@ impl Worker {
             snapshot,
 
             thread: Some(thread),
+            stop,
         }
     }
 
     pub fn close(&mut self) {
+        // Closing must discard pending user work, rather than drain the queue
+        // and start new transfers while the application is exiting.
+        let _ = self.stop.send(true);
         let (replacement, _) = tokio::sync::mpsc::channel(1);
 
         self.commands = replacement;
@@ -415,5 +434,32 @@ mod tests {
             65,
             "a metadata or folder result must not disappear after a batch"
         );
+    }
+
+    #[test]
+    fn closing_discards_pending_adds_and_releases_the_profile() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory = temp.path().join("state");
+        let mut worker = Worker::in_directory(egui::Context::default(), directory.clone());
+        for index in 0..64 {
+            worker
+                .commands
+                .try_send(Request::Add {
+                    url: format!("https://example.org/file-{index}"),
+                    folder: temp.path().join("out"),
+                    name: None,
+                    category: String::new(),
+                    description: String::new(),
+                    start: false,
+                })
+                .unwrap_or_else(|_| panic!("test queue unexpectedly full"));
+        }
+        worker.close();
+        let manager = Manager::open(&directory, Options::default()).unwrap();
+        assert!(
+            manager.list().len() < 64,
+            "closing drained the whole pending queue"
+        );
+        assert!(!manager.is_running());
     }
 }

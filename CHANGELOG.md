@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.4 — 2026-10-16
+
+- Retry disconnected/truncated range-probe bodies within the existing retry budget.
+- Pace small writes before committing data under individual and global speed limits, keeping progress/checkpoints responsive and avoiding a large burst when paused.
+- Retry briefly busy Windows local-service connections without replaying submitted commands.
+- Discard queued desktop commands on exit instead of starting new work during shutdown.
+- Reset transfer speed measurements after restart and release tracking/description state when history is removed.
+- Repair Windows package/version checks for normal CRLF checkouts and record the actual Windows compiler target.
+- Ship matching Windows setup, desktop/ZIP and Linux x64 assets built locally without CI or Actions.
+
 ## 0.1.0-beta.3 — 2026-10-16
 
 - Add the recommended Windows setup wizard with versioned metadata, per-user installation, optional Start Menu shortcuts, finish-page launch and a Windows uninstall entry. Native install/reinstall/uninstall verification passes without removing unrelated data.

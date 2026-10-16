@@ -14,7 +14,7 @@ Source: [Sub2Nex/stratafetch](https://github.com/Sub2Nex/stratafetch). [Releases
 
 ## Run
 
-For Windows, download and open [stratafetch-windows-x64-setup.exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.3/stratafetch-windows-x64-setup.exe). Its installation wizard installs StrataFetch for your user, adds optional Start Menu shortcuts and registers an uninstall entry. The finish page can launch the desktop. Rust is only needed when building from source.
+For Windows, download and open [stratafetch-windows-x64-setup.exe](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-windows-x64-setup.exe). Its installation wizard installs StrataFetch for your user, adds optional Start Menu shortcuts and registers an uninstall entry. The finish page can launch the desktop. Rust is only needed when building from source.
 
 Install stable Rust and the platform build tools. On Windows use Visual Studio Build Tools with the C++ workload. On Linux install `libxkbcommon-dev`, `libwayland-dev`, and standard C/C++ development tools.
 
@@ -27,7 +27,7 @@ The desktop uses eframe 0.36.2 with wgpu. Paste a direct URL with Ctrl+V or open
 
 ## Updates
 
-Download [v0.1.0-beta.3](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.3): [Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.3/stratafetch-windows-x64-setup.exe), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.3/stratafetch-linux-x64.tar.gz), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.3/SHA256SUMS). A separate standalone Windows desktop executable and portable ZIP remain available for manual deployments and the updater. Beta.3 fixes beta.2's Windows `TaskDialogIndirect` startup failure. Windows desktop startup and the isolated updater-helper replacement/restart path are now verified on Windows. Existing users of the broken beta.2 desktop must download beta.3 manually. Binaries remain unsigned, and Chrome may perform its own safety scan. All builds run locally without CI or Actions.
+Download [v0.1.0-beta.4](https://github.com/Sub2Nex/stratafetch/releases/tag/v0.1.0-beta.4): [Windows setup installer](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-windows-x64-setup.exe), [Linux x64 archive](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/stratafetch-linux-x64.tar.gz), and [SHA256SUMS](https://github.com/Sub2Nex/stratafetch/releases/download/v0.1.0-beta.4/SHA256SUMS). Beta.4 fixes interrupted probes, stalled progress at low speed limits, busy Windows service connections and pending work during shutdown. It retains the beta.3 Windows startup fix. A standalone desktop and ZIP support the updater and full bundle deployments. Binaries remain unsigned, and Chrome may perform its own safety scan. All builds run locally without CI or Actions.
 
 The desktop supports automatic update checks and **Tools → Check for updates…**. Windows x64 users can download, verify and install desktop updates with a restart. Automatic checks can be disabled in Settings → General. See [update behavior and release packaging](docs/UPDATES.md).
 

@@ -123,11 +123,16 @@ fn retry_delay(response: &Response, attempt: usize) -> Result<Duration> {
     );
     Ok(Duration::from_secs(wait))
 }
+struct Probe {
+    range_total: Option<u64>,
+    validator: Option<String>,
+}
+
 async fn probe(
     manager: &Manager,
     url: &str,
     cancel: &mut watch::Receiver<bool>,
-) -> Result<Option<Response>> {
+) -> Result<Option<Probe>> {
     let mut attempts = 0;
     loop {
         let response = tokio::select! {
@@ -147,7 +152,53 @@ async fn probe(
                 attempts += 1;
                 retry_delay(&response, attempts)?
             }
-            Ok(response) => return Ok(Some(response)),
+            Ok(response) => {
+                let valid = validator(&response);
+                if response.status() == StatusCode::PARTIAL_CONTENT {
+                    let raw = response
+                        .headers()
+                        .get(CONTENT_RANGE)
+                        .context("Missing Content-Range in probe")?
+                        .to_str()?;
+                    let (start, end, total) = parse_range(raw)?;
+                    ensure!((start, end) == (0, 0), "Invalid probe range");
+                    if let Some(value) = &valid {
+                        check_range(&response, 0, 0, total, value)?;
+                    }
+                    let body = consume_probe(response, cancel).await;
+                    match body {
+                        Ok(Some(())) => {
+                            return Ok(Some(Probe {
+                                range_total: Some(total),
+                                validator: valid,
+                            }));
+                        }
+                        Ok(None) => return Ok(None),
+                        Err(error) => {
+                            if attempts >= manager.0.options.retries {
+                                return Err(error);
+                            }
+                            attempts += 1;
+                            backoff(attempts)
+                        }
+                    }
+                } else {
+                    ensure!(
+                        response.status().is_success()
+                            || (response.status() == StatusCode::RANGE_NOT_SATISFIABLE
+                                && response
+                                    .headers()
+                                    .get(CONTENT_RANGE)
+                                    .is_some_and(|v| v == "bytes */0")),
+                        "HTTP {} during probe",
+                        response.status()
+                    );
+                    return Ok(Some(Probe {
+                        range_total: None,
+                        validator: valid,
+                    }));
+                }
+            }
             Err(error) => {
                 if attempts >= manager.0.options.retries {
                     return Err(error);
@@ -158,6 +209,25 @@ async fn probe(
         };
         tokio::select! { _ = tokio::time::sleep(delay) => (), _ = cancelled(cancel) => return Ok(None) }
     }
+}
+
+async fn consume_probe(
+    response: Response,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<Option<()>> {
+    let mut body = response.bytes_stream();
+    let mut received = 0;
+    loop {
+        let chunk = tokio::select! {
+            chunk = body.next() => chunk,
+            _ = cancelled(cancel) => return Ok(None)
+        };
+        let Some(bytes) = chunk else { break };
+        received += bytes.map_err(|e| anyhow::anyhow!(e.without_url()))?.len();
+        ensure!(received <= 1, "Oversized probe response");
+    }
+    ensure!(received == 1, "Truncated probe response");
+    Ok(Some(()))
 }
 async fn cancelled(rx: &mut watch::Receiver<bool>) {
     if *rx.borrow() {
@@ -226,46 +296,8 @@ pub(crate) async fn run(
     let Some(probe) = probe(manager, &job.url, &mut cancel).await? else {
         return Ok(());
     };
-    let valid = validator(&probe);
-    let range_total = if probe.status() == StatusCode::PARTIAL_CONTENT {
-        let raw = probe
-            .headers()
-            .get(CONTENT_RANGE)
-            .context("Missing Content-Range in probe")?
-            .to_str()?;
-        let (start, end, total) = parse_range(raw)?;
-        ensure!((start, end) == (0, 0), "Invalid probe range");
-        if let Some(v) = &valid {
-            check_range(&probe, 0, 0, total, v)?;
-        }
-        let mut body = probe.bytes_stream();
-        let mut received = 0;
-        loop {
-            let chunk =
-                tokio::select! {chunk=body.next()=>chunk,_=cancelled(&mut cancel)=>return Ok(())};
-            let Some(bytes) = chunk else {
-                break;
-            };
-            received += bytes.map_err(|e| anyhow::anyhow!(e.without_url()))?.len();
-            ensure!(received <= 1, "Oversized probe response");
-        }
-        ensure!(received == 1, "Truncated probe response");
-        Some(total)
-    } else if probe.status() == StatusCode::RANGE_NOT_SATISFIABLE
-        && probe
-            .headers()
-            .get(CONTENT_RANGE)
-            .is_some_and(|v| v == "bytes */0")
-    {
-        None
-    } else {
-        ensure!(
-            probe.status().is_success(),
-            "HTTP {} during probe",
-            probe.status()
-        );
-        None
-    };
+    let valid = probe.validator;
+    let range_total = probe.range_total;
     let segmented = range_total.is_some() && valid.is_some();
     job.resumable = segmented;
     if job.downloaded > 0 {
@@ -526,9 +558,29 @@ async fn transfer(
                 expected.is_none_or(|n| received <= n),
                 "Server sent too many bytes"
             );
-            for part in bytes.chunks(16 * 1024) {
+            // Pace bounded writes before committing them. A whole HTTP chunk can
+            // represent minutes at a low limit and must not hide checkpoints.
+            let per_connection = job.bytes_per_second as f64 / job.connections.max(1) as f64;
+            let global_rate = manager.settings().global_bytes_per_second as f64;
+            let pace = match (per_connection > 0.0, global_rate > 0.0) {
+                (true, true) => per_connection.min(global_rate),
+                (true, false) => per_connection,
+                (false, true) => global_rate,
+                (false, false) => 0.0,
+            };
+            let quantum = if pace == 0.0 {
+                16 * 1024
+            } else {
+                (pace / 20.0).ceil().clamp(1.0, 16_384.0) as usize
+            };
+            for part in bytes.chunks(quantum) {
                 tokio::select! {
-                    _ = global_throttle(manager, part.len()) => (),
+                    _ = async {
+                        global_throttle(manager, part.len()).await;
+                        if per_connection > 0.0 {
+                            tokio::time::sleep(Duration::from_secs_f64(part.len() as f64 / per_connection)).await;
+                        }
+                    } => (),
                     _ = cancelled(&mut cancel) => {
                         file.sync_data().await?;
                         checkpoint_job(manager,&shared,index,pending,&digest,start_time).await?;
@@ -536,16 +588,12 @@ async fn transfer(
                     }
                 }
                 write_chunk(&mut file, part, &mut digest, &mut pending).await?;
-            }
-            if job.bytes_per_second > 0 {
-                let per_connection = job.bytes_per_second as f64 / job.connections.max(1) as f64;
-                tokio::select! {_=tokio::time::sleep(Duration::from_secs_f64(bytes.len() as f64/per_connection))=>(),_=cancelled(&mut cancel)=>{file.sync_data().await?;checkpoint_job(manager,&shared,index,pending,&digest,start_time).await?;return Ok(());}}
-            }
-            if checkpoint.elapsed() >= Duration::from_millis(250) {
-                file.sync_data().await?;
-                checkpoint_job(manager, &shared, index, pending, &digest, start_time).await?;
-                pending = 0;
-                checkpoint = Instant::now();
+                if checkpoint.elapsed() >= Duration::from_millis(250) {
+                    file.sync_data().await?;
+                    checkpoint_job(manager, &shared, index, pending, &digest, start_time).await?;
+                    pending = 0;
+                    checkpoint = Instant::now();
+                }
             }
         }
         file.sync_data().await?;

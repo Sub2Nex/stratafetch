@@ -244,12 +244,22 @@ async fn exchange(
 pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
     #[cfg(windows)]
     {
-        let stream =
-            tokio::net::windows::named_pipe::ClientOptions::new().open(endpoint(directory)?)?;
-        tokio::time::timeout(
-            std::time::Duration::from_secs(15),
-            exchange(stream, command),
-        )
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            let name = endpoint(directory)?;
+            let stream = loop {
+                match tokio::net::windows::named_pipe::ClientOptions::new().open(&name) {
+                    Ok(stream) => break stream,
+                    // A connected client can briefly occupy the only pipe
+                    // instance before the server creates the next one. Retry
+                    // connection only: never replay a submitted mutation.
+                    Err(error) if error.raw_os_error() == Some(231) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            exchange(stream, command).await
+        })
         .await?
     }
     #[cfg(unix)]
@@ -358,6 +368,51 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn busy_windows_pipe_waits_for_the_next_instance_without_replaying_commands() {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = Manager::open(directory.path(), Default::default()).unwrap();
+        let name = endpoint(directory.path()).unwrap();
+        let occupied = create_pipe(&name, true).unwrap();
+        let client = tokio::net::windows::named_pipe::ClientOptions::new()
+            .open(&name)
+            .unwrap();
+        occupied.connect().await.unwrap();
+        let request = tokio::spawn({
+            let path = directory.path().to_owned();
+            async move {
+                call(
+                    &path,
+                    Command::AddPaused {
+                        url: "https://example.org/file".into(),
+                        directory: path.clone(),
+                        name: None,
+                        category: String::new(),
+                    },
+                )
+                .await
+            }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let next = create_pipe(&name, false).unwrap();
+        let handler = tokio::spawn({
+            let manager = manager.clone();
+            async move {
+                next.connect().await?;
+                handle(next, manager).await
+            }
+        });
+        let reply = request
+            .await
+            .unwrap()
+            .expect("a briefly busy pipe must not fail the command");
+        assert!(reply.error.is_none(), "{:?}", reply.error);
+        assert_eq!(manager.list().len(), 1);
+        handler.await.unwrap().unwrap();
+        drop(client);
+        drop(occupied);
+    }
     #[cfg(unix)]
     #[tokio::test]
     async fn unix_long_paths_stale_sockets_and_cleanup() {
