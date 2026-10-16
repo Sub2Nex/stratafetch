@@ -1,7 +1,11 @@
 use serde_json::Value;
 use std::path::Path;
 fn cli(state: &Path, args: &[&str]) -> Value {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_stratafetch"))
+    // Cross-built tests run on the target OS, where the build host's absolute
+    // Cargo path is unavailable. Allow an explicit, actually shipped CLI.
+    let executable = std::env::var_os("STRATAFETCH_TEST_CLI")
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_stratafetch").into());
+    let output = std::process::Command::new(executable)
         .arg("--state")
         .arg(state)
         .arg("--json")

@@ -23,6 +23,6 @@ Tools → Check for updates supports verified desktop replacement and restart on
 
 ## Verification
 
-Regression fixtures cover disconnected probes with retry exhaustion, low-limit progress/pause/resume with exact output bytes, pending-command shutdown, restarted speed measurements and busy Windows pipe admission. The full Rust suite, strict Clippy, browser scripts, native executable smoke checks and isolated installer roundtrip are run locally before publication. Each archive records its source revision in BUILD.txt.
+**88 Rust tests pass on Linux and 82 pass natively on Windows**, including platform-specific regressions. Strict Clippy, formatting and all 18 browser-script tests pass. Actual Windows/Linux CLI and native-host downloads, desktop rendering, an isolated Windows beta.3 → beta.4 updater restart and installer install/reinstall/uninstall pass. ZIP contents, embedded Windows manifests and SHA-256 hashes are verified. [Detailed audit and evidence](https://github.com/Sub2Nex/stratafetch/blob/main/docs/STABILITY-BETA4.md). Each archive records its application build revision in BUILD.txt.
 
 All builds use local WSL environments without CI or GitHub Actions. Windows binaries are unsigned. This beta does not claim exhaustive reliability, code-signing reputation, macOS/ARM support or complete installed-browser/accessibility testing.
