@@ -1,5 +1,15 @@
 # Codex continuation — 2026-10-16
 
+## Release update — beta.9 / extension 0.2.5 (2026-10-17)
+
+The user requested a GitHub push and an app bug-fix update. Main already contained beta.8 at 75d6e3c, while GitHub Latest was still beta.5 and beta.6 remained a draft. Prepare a new beta.9 release with matching full Windows setup, update helper, Linux x64 package, extension archives and checksums; preserve the older draft assets.
+
+Fixed resident confirmation lifetime: IPC confirmation futures own a cancellation flag; disconnect/aborted service cancels the actual Windows TaskDialog via its timer callback. This releases blocking dialog threads on app shutdown. A typed pre-submission connection error distinguishes a missing service (standalone confirmation allowed) from a lost submitted request/reply (error, never a duplicate fallback prompt). Confirmation replies omit history. Windows binaries are still unsigned; no browser/security settings were changed. Extension code/version is unchanged from beta.8/0.2.5, and live Chrome accepted-transfer verification after Reload remains outstanding.
+
+Verification: 177 JavaScript tests, four extension packaging tests, 29 native Windows library tests (including an actual self-cancelling TaskDialog), 18 desktop tests, and 32 Linux library tests passed. The actual release desktop also exited normally with consent pending in an isolated empty smoke profile; the host reported disconnection and exited without opening a fallback prompt or creating a download. Windows tests need normal user permissions outside the workspace sandbox for named pipes, temporary profiles and isolated registry fixtures. Both release targets built locally, with Linux on Ubuntu 24.04; no CI/Actions.
+
+Canonical checkout remains D:/stratafetch-main/.publish. Build/sync/package scripts and installed Chrome path are documented below. Use the full setup as the primary Windows download; stratafetch-desktop.exe is retained for older updater compatibility.
+
 ## Current repair — beta.8 / extension 0.2.5
 
 The user confirms prompt latency is fixed but reports continued Chrome transfer during the choice. beta.8 introduces verified public-request cancellation before consent. probeReplay performs a bounded anonymous range GET for known-size HTTPS/query-free URLs, checking status/range length/MIME and rejecting private/no-store or cookie/auth-varying responses. No file/job is created by the probe. The original browser request is cancelled and confirmed stopped while the prompt remains open. Keep/failure replays the verified URL with downloads.download, which uses normal browser networking/security; no cookies are read/copied. A recovery recipe is persisted before cancellation. Unsafe/private changes prevent replay. Unknown/signed/private/unverifiable downloads retain the beta.7 pause-based flow. Cancellation failure must not authorize native commit. This is not a promise of pre-first-byte interception or arbitrary POST request recreation.

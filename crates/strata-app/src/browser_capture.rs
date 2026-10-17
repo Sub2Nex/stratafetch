@@ -225,7 +225,7 @@ pub fn confirm(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<b
         .unwrap_or(identity.filename);
     #[cfg(windows)]
     if std::env::var_os("STRATAFETCH_CONFIRM_CAPTURE").is_none() {
-        if let Ok(reply) = runtime.block_on(ipc::call(
+        match runtime.block_on(ipc::call(
             &state_dir(),
             Command::ConfirmBrowser {
                 name: name.clone(),
@@ -233,8 +233,12 @@ pub fn confirm(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<b
                 destination: download_dir().display().to_string(),
             },
         )) {
-            let reply = check_reply(reply)?;
-            return Ok(reply.accepted_id.as_deref() == Some("browser-confirmation-accepted"));
+            Ok(reply) => {
+                let reply = check_reply(reply)?;
+                return Ok(reply.accepted_id.as_deref() == Some("browser-confirmation-accepted"));
+            }
+            Err(error) if ipc::is_unavailable(&error) => (),
+            Err(error) => return Err(error.context("The running app disconnected during confirmation; keep the download in your browser")),
         }
     }
     #[cfg(not(windows))]

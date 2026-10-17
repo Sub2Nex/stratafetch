@@ -1,4 +1,12 @@
-# StrataFetch v0.1.0-beta.8 — Stop verified public browser transfers before the choice
+# StrataFetch v0.1.0-beta.9 — Confirmation lifecycle and complete release update
+
+Windows browser confirmations now close when their companion connection disappears or the app exits. This releases blocking dialog threads during shutdown instead of leaving Exit or an update waiting for a click in an abandoned prompt. A connection lost after submission no longer opens a second fallback confirmation. Resident confirmation replies omit download history, so a large history does not delay the consent response.
+
+This release includes the beta.7/beta.8 browser interception and system tray work that was pushed to main but absent from GitHub's published Latest release. Use the Windows setup to update all three executables and bundled extensions. Extension version remains 0.2.5: no extension code changed from beta.8, so an already reloaded 0.2.5 installation needs no new extension upload. Users upgrading from older published releases must update/reload the matching extension.
+
+Windows binaries remain unsigned. Actual Chrome handoff after reloading the extension still requires browser verification; request-level interception before Chrome receives any bytes is not guaranteed by the browser downloads API. Public reproducible requests can be stopped while choosing; private or unverifiable requests retain their browser fallback. No CI or Actions is used.
+
+## Previous beta.8 changes
 
 Extension 0.2.5 adds exclusive ownership for verified public GET downloads. An anonymous bounded range request validates known size, file type and public response characteristics. The original Chrome transfer is then cancelled while confirmation is open. Accepting uses StrataFetch; declining or failure restarts the verified URL through the browser. Unknown-size, query/signed, private and unverifiable requests preserve the original browser transfer. A failed browser cancellation never authorizes a competing native transfer. No browser safety protections are disabled. Completed-file adoption still handles a file that wins the race before cancellation.
 

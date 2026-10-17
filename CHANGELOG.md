@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.9 — 2026-10-17
+
+- Cancel resident Windows confirmation dialogs on companion disconnect or app shutdown, releasing blocking threads for Exit and updates.
+- Prevent duplicate fallback prompts after an already submitted confirmation loses its reply.
+- Send compact confirmation replies without enumerating download history.
+- Publish matching installers/packages with the previously unreleased beta.7/beta.8 tray and browser capture fixes (extension 0.2.5).
+
 ## Unreleased — extension 0.2.2
 
 - Use persistent download identity and tolerate legitimate Chrome timestamp updates during browser capture.

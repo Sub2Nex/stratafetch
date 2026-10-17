@@ -7,6 +7,48 @@ use std::path::Path;
 use strata_core::Manager;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 const MAX: usize = 1024 * 1024;
+
+#[derive(Debug)]
+struct ServiceUnavailable(std::io::Error);
+impl std::fmt::Display for ServiceUnavailable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Local service unavailable: {}", self.0)
+    }
+}
+impl std::error::Error for ServiceUnavailable {}
+
+/// Only connection failures allow a confirmation to fall back to another UI.
+/// A lost reply after submission must never create a second consent dialog.
+pub fn is_unavailable(error: &anyhow::Error) -> bool {
+    error.is::<ServiceUnavailable>()
+}
+
+#[cfg(any(windows, test))]
+async fn connected_confirmation<T: Send + 'static>(
+    stream: &mut (impl AsyncRead + Unpin),
+    show: impl FnOnce(std::sync::Arc<std::sync::atomic::AtomicBool>) -> T + Send + 'static,
+) -> Result<T> {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    struct CancelOnDrop(Arc<AtomicBool>);
+    impl Drop for CancelOnDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+    let cancel = CancelOnDrop(Arc::new(AtomicBool::new(false)));
+    let flag = cancel.0.clone();
+    let task = tokio::task::spawn_blocking(move || show(flag));
+    tokio::select! {
+        result = task => Ok(result?),
+        disconnected = stream.read_u8() => {
+            disconnected?;
+            anyhow::bail!("Unexpected data while awaiting confirmation")
+        }
+    }
+}
 #[cfg(windows)]
 fn create_pipe(
     name: &str,
@@ -262,7 +304,7 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
                     Err(error) if error.raw_os_error() == Some(231) => {
                         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                     }
-                    Err(error) => return Err(error.into()),
+                    Err(error) => return Err(ServiceUnavailable(error).into()),
                 }
             };
             exchange(stream, command).await
@@ -271,7 +313,9 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
     }
     #[cfg(unix)]
     {
-        let stream = tokio::net::UnixStream::connect(endpoint(directory)?).await?;
+        let stream = tokio::net::UnixStream::connect(endpoint(directory)?)
+            .await
+            .map_err(ServiceUnavailable)?;
         ensure!(
             stream.peer_cred()?.uid() == user_id(),
             "IPC service belongs to another user"
@@ -288,6 +332,38 @@ async fn handle(mut stream: impl AsyncRead + AsyncWrite + Unpin, manager: Manage
         tokio::time::timeout(std::time::Duration::from_secs(5), read_frame(&mut stream)).await??;
     ensure!(matches!(request.version, 1 | 2), "Unsupported IPC version");
     let version = request.version;
+    #[cfg(windows)]
+    let reply = if let Command::ConfirmBrowser {
+        name,
+        source,
+        destination,
+    } = request.command
+    {
+        connected_confirmation(&mut stream, move |cancelled| {
+            let result = crate::browser_confirmation::windows_dialog_cancellable(
+                &name,
+                &source,
+                &destination,
+                &cancelled,
+            );
+            Reply {
+                version: 1,
+                // Confirmation is a decision, not a download-history refresh.
+                jobs: vec![],
+                accepted_id: result
+                    .as_ref()
+                    .ok()
+                    .filter(|accepted| **accepted)
+                    .map(|_| "browser-confirmation-accepted".into()),
+                error: result.err().map(|error| format!("{error:#}")),
+                settings: Default::default(),
+            }
+        })
+        .await?
+    } else {
+        tokio::task::spawn_blocking(move || execute(&manager, request.command)).await?
+    };
+    #[cfg(not(windows))]
     let reply = tokio::task::spawn_blocking(move || execute(&manager, request.command)).await?;
     tokio::time::timeout(std::time::Duration::from_secs(15), async {
         if version == 2 { write_pages(&mut stream, reply).await } else {
@@ -375,6 +451,110 @@ pub async fn serve(directory: &Path, manager: Manager) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn disconnected_browser_cancels_its_blocking_confirmation() {
+        use std::sync::atomic::Ordering;
+        let (client, mut server) = tokio::io::duplex(64);
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finished, done) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            connected_confirmation(&mut server, move |cancelled| {
+                started.send(()).unwrap();
+                while !cancelled.load(Ordering::Acquire) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                let _ = finished.send(());
+            })
+            .await
+        });
+        ready.await.unwrap();
+        drop(client);
+        assert!(task.await.unwrap().is_err());
+        tokio::time::timeout(std::time::Duration::from_secs(2), done)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn aborting_service_cancels_a_confirmation_without_waiting_for_a_click() {
+        use std::sync::atomic::Ordering;
+        let (_client, mut server) = tokio::io::duplex(64);
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finished, done) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            connected_confirmation(&mut server, move |cancelled| {
+                started.send(()).unwrap();
+                while !cancelled.load(Ordering::Acquire) {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                let _ = finished.send(());
+            })
+            .await
+        });
+        ready.await.unwrap();
+        task.abort();
+        let _ = task.await;
+        tokio::time::timeout(std::time::Duration::from_secs(2), done)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn lost_command_reply_is_not_a_connection_failure() {
+        let (client, server) = tokio::io::duplex(1024);
+        let handler = tokio::spawn(async move {
+            let mut server = server;
+            let _: Request = read_frame(&mut server).await.unwrap();
+            // The server accepted the command, then exited before its reply.
+        });
+        let error = exchange(client, Command::List).await.unwrap_err();
+        handler.await.unwrap();
+        assert!(!is_unavailable(&error), "must not replay submitted consent");
+        assert!(is_unavailable(
+            &ServiceUnavailable(std::io::Error::from(std::io::ErrorKind::NotFound)).into()
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn open_windows_confirmation_closes_when_connection_is_cancelled() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let flag = Arc::new(AtomicBool::new(false));
+        let trigger = flag.clone();
+        let timer = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            trigger.store(true, Ordering::Release);
+        });
+        assert!(
+            !crate::browser_confirmation::windows_dialog_cancellable(
+                "StrataFetch cancellation test — no transfer",
+                "example.org",
+                "No file created",
+                &flag,
+            )
+            .unwrap()
+        );
+        timer.join().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cancelled_confirmation_does_not_create_a_window() {
+        assert!(
+            !crate::browser_confirmation::windows_dialog_cancellable(
+                "cancelled.zip",
+                "example.org",
+                "Downloads",
+                &std::sync::atomic::AtomicBool::new(true),
+            )
+            .unwrap()
+        );
+    }
     #[cfg(windows)]
     #[tokio::test]
     async fn busy_windows_pipe_waits_for_the_next_instance_without_replaying_commands() {

@@ -52,6 +52,16 @@ pub fn show(name: String, source: String, destination: String) -> Result<bool> {
 
 #[cfg(windows)]
 pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Result<bool> {
+    windows_dialog_cancellable(name, source, destination, &AtomicBool::new(false))
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_dialog_cancellable(
+    name: &str,
+    source: &str,
+    destination: &str,
+    cancelled: &AtomicBool,
+) -> Result<bool> {
     use windows_sys::Win32::{
         Foundation::*,
         UI::{Controls::*, WindowsAndMessaging::*},
@@ -64,8 +74,18 @@ pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Res
         event: u32,
         _: WPARAM,
         _: LPARAM,
-        _: isize,
+        context: isize,
     ) -> i32 {
+        // The Arc owning this flag outlives TaskDialogIndirect and its callbacks.
+        let cancelled = unsafe { &*(context as *const AtomicBool) };
+        if (event == TDN_CREATED as u32 || event == TDN_TIMER as u32)
+            && cancelled.load(Ordering::Acquire)
+        {
+            unsafe {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON as u32, 101, 0);
+            }
+            return 0;
+        }
         if event == TDN_CREATED as u32 {
             // Browser native hosts can inherit SW_HIDE. Make this dedicated
             // confirmation visible explicitly, including on its first show.
@@ -76,6 +96,9 @@ pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Res
             }
         }
         0
+    }
+    if cancelled.load(Ordering::Acquire) {
+        return Ok(false);
     }
     let title = wide("Download with StrataFetch");
     let heading = wide("Download this file?");
@@ -99,11 +122,12 @@ pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Res
     config.pszWindowTitle = title.as_ptr();
     config.pszMainInstruction = heading.as_ptr();
     config.pszContent = content.as_ptr();
-    config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT;
+    config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT | TDF_CALLBACK_TIMER;
     config.cButtons = buttons.len() as u32;
     config.pButtons = buttons.as_ptr();
     config.nDefaultButton = 101;
     config.pfCallback = Some(visible);
+    config.lpCallbackData = cancelled as *const AtomicBool as isize;
     let mut choice = 0;
     let result = unsafe {
         TaskDialogIndirect(
@@ -117,7 +141,7 @@ pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Res
         result >= 0,
         "Cannot display Windows download confirmation ({result:#x})"
     );
-    Ok(choice == 100)
+    Ok(choice == 100 && !cancelled.load(Ordering::Acquire))
 }
 
 struct Confirmation {
