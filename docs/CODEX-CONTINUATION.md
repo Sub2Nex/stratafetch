@@ -6,7 +6,9 @@ The user reports missing icons in Start menu/Installed apps after the GitHub dow
 
 beta.10 packages a dedicated stratafetch.ico. NSIS assigns explicit icon locations to both shortcuts, uses a quoted icon path with index 0 in DisplayIcon, and notifies Windows Shell after successful setup. The installer builder rejects a missing/mismatched product icon. The local deploy helper now requires the full matching setup and verified checksum, invokes normal setup, then checks installed file hashes and uninstall version/icon. This avoids another EXE-only deployment leaving stale Windows metadata. `scripts/verify-windows-shell.ps1` verifies real installed shortcuts/registry and native Windows Shell icon extraction. Use the normal full setup; no unsigned execution policy bypass is authorized.
 
-No browser extension code changed (0.2.5). No new browser transfer claim is made. Build/test/publish beta.10 locally without CI or Actions, preserving beta.6 draft and prior released assets.
+Completed: beta.10 was built locally, pushed and published as GitHub Latest with eleven server-side asset SHA-256 digests matching local files. Release source/tag: 49fcce6c52f81dca68045256ed053fff462eac8a. The actual normal full setup ran on the user's idle installation via the corrected deploy helper; all 23 checked component hashes matched, Windows Installed apps metadata now says beta.10, both Start menu links explicitly use the installed ICO, and native Windows Shell extracted both large and small icons. The app restarted in the tray; native ping reports bridgeVersion 0.1.0-beta.10, running true, active 0. Backup: .smoke/runtime-backup/20261017-104718. Old beta.6 draft and released assets were preserved.
+
+No browser extension code changed (0.2.5), so no store ZIP re-upload is required for an existing 0.2.5 submission. No new browser transfer claim is made. No CI, Actions or security-policy bypass was used.
 
 ## Release update — beta.9 / extension 0.2.5 (2026-10-17)
 
