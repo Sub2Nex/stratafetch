@@ -91,7 +91,7 @@ async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: C
 
                 jobs: vec![],
 
-                error: Some(format!("Engine task failed: {e}")),
+                error: Some(strata_app::localized_format!("Engine task failed: {e}", "Hämtningsuppgiften misslyckades: {e}")),
 
                 accepted_id: None,
 
@@ -107,7 +107,7 @@ async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: C
 
                 jobs: vec![],
 
-                error: Some(format!("Local service unavailable: {e:#}")),
+                error: Some(strata_app::localized_format!("Local service unavailable: {e:#}", "Den lokala tjänsten är inte tillgänglig: {e:#}")),
 
                 accepted_id: None,
 
@@ -180,7 +180,7 @@ impl Worker {
                             emit(
                                 &events,
                                 &ctx,
-                                Event::Message(format!("Local service failed: {error:#}")),
+                                Event::Message(strata_app::localized_format!("Local service failed: {error:#}", "Den lokala tjänsten misslyckades: {error:#}")),
                             );
                         }
                     })
@@ -250,8 +250,8 @@ impl Worker {
                             let ctx = ctx.clone();
                             tokio::task::spawn_blocking(move || {
                                 let message = match strata_app::browser_integration::setup(browser) {
-                                    Ok(()) => format!("{} is open and the native bridge is ready. Follow the local extension steps in Browser integration.", browser.label()),
-                                    Err(error) => format!("Browser setup: {error:#}"),
+                                    Ok(()) => strata_app::localized_format!("{} is open and the native bridge is ready. Follow the local extension steps in Browser integration.", "{} är öppen och webbläsarbryggan är klar. Följ anvisningarna för lokala tillägg under Webbläsarintegrering.", browser.label()),
+                                    Err(error) => strata_app::localized_format!("Browser setup: {error:#}", "Webbläsarkonfiguration: {error:#}"),
                                 };
                                 emit(&events, &ctx, Event::Message(message));
                             });
@@ -262,7 +262,7 @@ impl Worker {
                             let ctx = ctx.clone();
                             tokio::spawn(async move {
                                 let mut dialog = rfd::AsyncFileDialog::new()
-                                    .set_title("Choose download directory");
+                                    .set_title(strata_app::i18n::tr("Choose download directory"));
                                 if std::path::Path::new(&initial).is_dir() {
                                     dialog = dialog.set_directory(&initial);
                                 }
@@ -354,7 +354,7 @@ impl Worker {
                             let mut reply = call(
                                 manager.as_ref(),
                                 &directory,
-                                Command::AddPaused {
+                                Command::AddPausedUnique {
                                     url,
 
                                     directory: folder,

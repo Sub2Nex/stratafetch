@@ -40,10 +40,17 @@ for dist in [workspace/'dist', repo/'dist']:
     for target in dist.rglob('background.js'):
         if 'unpacked' not in target.relative_to(dist).parts or target.parent.name not in ('chromium', 'firefox'):
             continue
-        source = repo/'extensions'/target.parent.name/'background.js'
-        target.write_bytes(source.read_bytes())
-        assert hashlib.sha256(target.read_bytes()).digest() == hashlib.sha256(source.read_bytes()).digest()
+        source = repo/'extensions'/target.parent.name
+        # A new background script can depend on locale files or new manifest
+        # permissions. Sync the complete payload so Reload never mixes versions.
+        for file in source.rglob('*'):
+            if not file.is_file():
+                continue
+            destination = target.parent/file.relative_to(source)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(file.read_bytes())
+            assert destination.read_bytes() == file.read_bytes()
         unpacked += 1
 state_path.parent.mkdir(parents=True, exist_ok=True)
 state_path.write_text(json.dumps(state, indent=2), encoding='utf-8')
-print(f'Synchronized {count} workspace files and {unpacked} development unpacked background scripts. Archived release assets unchanged.')
+print(f'Synchronized {count} workspace files and {unpacked} complete development unpacked extensions. Archived release assets unchanged.')

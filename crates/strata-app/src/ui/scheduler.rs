@@ -15,7 +15,7 @@ pub fn show(ctx: &egui::Context, state: &mut State, jobs: &[Job]) -> Vec<Command
 
     let mut open = true;
 
-    egui::Window::new("Queue scheduler").open(&mut open).default_width(560.0).vscroll(true).show(ctx,
+    egui::Window::new(strata_app::i18n::tr("Queue scheduler")).open(&mut open).default_width(560.0).vscroll(true).show(ctx,
 |ui| {
 
         let target=state.selection.cursor.as_ref().and_then(|id|jobs.iter().find(|j|j.id==*id));
@@ -37,19 +37,19 @@ delay_minutes:0}
 }
 
             let draft=state.draft.as_mut().unwrap();
-ui.label("Category label");
+ui.label(strata_app::i18n::tr("Category label"));
 ui.text_edit_singleline(&mut draft.category);
-ui.label("Start after (minutes; 0 = now)");
+ui.label(strata_app::i18n::tr("Start after (minutes; 0 = now)"));
 ui.add(egui::DragValue::new(&mut draft.delay_minutes).range(0..=525600));
-ui.label("Priority (higher runs first)");
+ui.label(strata_app::i18n::tr("Priority (higher runs first)"));
 ui.add(egui::DragValue::new(&mut draft.priority).range(-100..=100));
 
             let now=time::OffsetDateTime::now_utc().unix_timestamp().max(0) as u64;
-ui.label(format!("Planned start: {} UTC",
+ui.label(strata_app::localized_format!("Planned start: {} UTC", "Planerad start: {} UTC",
 added(now+draft.delay_minutes*60)));
 
             if ui.add_enabled(inactive,
-egui::Button::new("Save and queue this download")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Save and queue this download"))).clicked(){
 commands.push(Command::Configure{
 id:job.id.clone(),
 priority:draft.priority,
@@ -63,16 +63,16 @@ scheduled_at:(draft.delay_minutes>0).then_some(now+draft.delay_minutes*60)}
 }
 
 if !inactive{
-ui.small("Select an inactive download, or pause and wait before editing its schedule.");
+ui.small(strata_app::i18n::tr("Select an inactive download, or pause and wait before editing its schedule."));
 }
 
         }
 else{
-ui.label("Select an inactive download to schedule it.");
+ui.label(strata_app::i18n::tr("Select an inactive download to schedule it."));
 }
 
         ui.separator();
-ui.strong("Scheduled downloads");
+ui.strong(strata_app::i18n::tr("Scheduled downloads"));
 for job in jobs.iter().filter(|j|j.scheduled_at.is_some()&&j.status!=Status::Completed){
 ui.label(format!("{} · {} UTC · {}",
 name(job),
@@ -80,7 +80,7 @@ added(job.scheduled_at.unwrap()),
 status(job.status)));
 }
 
-        ui.small("The desktop/service must stay running. Interrupted downloads reopen paused; no OS autostart or hosted workflow is used.");
+        ui.small(strata_app::i18n::tr("The desktop/service must stay running. Interrupted downloads reopen paused; no OS autostart or hosted workflow is used."));
 
     }
 );

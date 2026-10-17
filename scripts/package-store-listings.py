@@ -11,7 +11,7 @@ args = parser.parse_args()
 summary = 'Send browser downloads to StrataFetch. Choose the desktop app or keep downloading in your browser.'
 description = '''Bring browser downloads into StrataFetch, a free, open-source desktop download manager.
 
-When an eligible download starts, StrataFetch asks whether you want to download it in the desktop app or keep it in your browser. The extension pauses the browser transfer during the handoff and cancels it only after the local app acknowledges receiving file data. Declined or failed handoffs resume the browser download.
+When an eligible download starts, StrataFetch asks whether you want to download it in the desktop app or keep it in your browser. Identified GET transfers are cancelled during confirmation without waiting for a network probe. Declined or failed handoffs restart through the browser. POST requests remain in the browser; requests begun before extension reload retain the conservative pause fallback.
 
 WHAT YOU CAN DO
 • Capture eligible public HTTP and HTTPS file downloads automatically.
@@ -36,13 +36,14 @@ Privacy policy: https://github.com/Sub2Nex/stratafetch/blob/main/PRIVACY.md
 permissions = '''SINGLE PURPOSE
 Hand off user-selected or confirmed browser file downloads to the installed local StrataFetch download manager, with browser fallback.
 
-downloads: Detect eligible downloads, pause while asking the user, cancel only after the native transfer acknowledges file data, and resume the original download on rejection or failure.
+downloads: Detect eligible downloads, stop identified GET transfers during consent, restart through the browser on decline/failure, and adopt completed files after consent.
+webRequest and HTTP/HTTPS host access: Observe request URL and method in a bounded in-memory map for up to 60 seconds to distinguish GET from POST; no headers or request bodies are read.
 nativeMessaging: Communicate with the registered local StrataFetch native host to submit the download URL/file metadata and obtain connection and handoff status.
 contextMenus: Add Download with StrataFetch to the link context menu.
 activeTab: Read the current tab URL only when the user invokes Use current page URL in the popup. No page content is extracted.
 storage: Retain capture preferences, excluded domains and temporary download ID/start time/native handoff ID records for recovery after a background worker restart.
 
-No host permissions, cookies permission, broad history permission, injected content scripts, remotely hosted JavaScript, eval-based downloads, advertising SDKs or analytics SDKs are requested.
+No cookies permission, broad history permission, injected content scripts, remotely hosted JavaScript, eval-based downloads, advertising SDKs or analytics SDKs are requested.
 '''
 privacy = '''PRIVACY POLICY URL
 https://github.com/Sub2Nex/stratafetch/blob/main/PRIVACY.md

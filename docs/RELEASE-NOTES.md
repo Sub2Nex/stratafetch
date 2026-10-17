@@ -1,4 +1,16 @@
-# StrataFetch v0.1.0-beta.10 — Windows Start menu and Installed apps icons
+# StrataFetch v0.1.0-beta.11 — Swedish interface and download controls
+
+Enable Svenska under Settings → Appearance. Desktop menus, advanced settings, transfer/scheduler/update dialogs, tray actions and browser confirmation text use Swedish. The browser popup follows the app language received from its local companion; before connecting it uses the browser UI language. The saved choice is shared with separately launched native hosts and the Windows installer. File names, paths, URLs, protocol identifiers and verbatim third-party diagnostics are preserved.
+
+Identified GET downloads are stopped before choice without waiting for anonymous probing or known size, preventing competing resume handlers from continuing the cancelled stream. Keep in browser restarts through the browser. POST downloads are left untouched. A real Edge extension test verifies a stopped stream during consent, browser restart on decline and POST preservation. Chrome may still briefly show its initial download entry because onCreated fires after the request begins.
+
+Extension 0.2.6 adds capture filters for file extensions and minimum size. A minimum size leaves unknown-size requests in the browser. Filters are checked before pausing and again before handoff; manual links bypass automatic-capture filters. Empty/default filters preserve previous behavior. Request-method observation now requires webRequest and HTTP/HTTPS host access. No cookies or request bodies are read.
+
+Manual and batch additions now reuse an unfinished job for the same URL, file name and destination instead of starting duplicate copies. Completed files remain intact, different explicit names/directories remain separate, and reusing a job preserves its schedule/category. Browser capture keeps separate ownership so failed handoff rollback cannot cancel an older manual job.
+
+Use the full Windows setup to update every component and reload the local extension once. Replace older store upload ZIPs with version 0.2.6. Chrome/Edge store identities still require their assigned IDs; Firefox permanent installation requires Mozilla signing. Native Windows binaries remain unsigned. This release does not establish IDM feature or speed parity, and live Chrome accepted-transfer verification after Reload remains outstanding. No CI or Actions was used.
+
+## Previous beta.10 changes
 
 The Windows setup now installs a dedicated stratafetch.ico, explicitly assigns it to app/uninstall Start menu shortcuts, and writes a quoted icon location with index 0 for Installed apps. Setup refreshes shell icon registrations on upgrade. Installer builds reject payloads without the matching icon. Local development deployment uses the full setup so shell metadata is updated along with the executables.
 

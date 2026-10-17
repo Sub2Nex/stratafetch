@@ -37,7 +37,10 @@ class PackagingTests(unittest.TestCase):
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertNotIn('key', manifest)
                 self.assertTrue(all(name in archive.namelist() for name in manifest['icons'].values()))
-                self.assertEqual(len(archive.namelist()), 8)
+                self.assertEqual(len(archive.namelist()), 11)
+                self.assertEqual(manifest['default_locale'], 'en')
+                self.assertIn('locale.js', archive.namelist())
+                self.assertIn('_locales/sv/messages.json', archive.namelist())
         self.assertTrue((output/'unpacked/chromium/manifest.json').exists())
         self.assertTrue((output/'unpacked/firefox/manifest.json').exists())
         for line in (output/'SHA256SUMS').read_text().splitlines():

@@ -34,7 +34,7 @@ pub fn show(
 
     let mut open = true;
 
-    egui::Window::new("Transfer details").id(egui::Id::new(("transfer",
+    egui::Window::new(strata_app::i18n::tr("Transfer details")).id(egui::Id::new(("transfer",
 &job.id))).open(&mut open).default_width((ctx.content_rect().width()-40.0).min(600.0)).default_height(480.0).default_pos(ctx.content_rect().center()-egui::vec2(300.0,
 220.0)).max_height((ctx.content_rect().height()-40.0).max(160.0)).show(ctx,
 |ui| {
@@ -46,8 +46,7 @@ label) in ["Download status",
 "Speed limiter",
 "On completion"].iter().enumerate(){
 ui.selectable_value(&mut state.transfer_tab,
-index,
-*label);
+index,strata_app::i18n::tr(*label));
 }
 }
 );
@@ -91,21 +90,21 @@ else if job.downloaded>0 {
 else{
 "Determined when download begins"}
 .into())] {
-ui.label(label);
-ui.label(value);
+ui.label(strata_app::i18n::tr(label));
+ui.label(strata_app::i18n::tr(&value));
 ui.end_row();
 }
 
                 }
 );
-ui.label(format!("Saved to: {}",
+ui.label(strata_app::localized_format!("Saved to: {}", "Sparad i: {}",
 job.destination.to_string_lossy()));
 
                 if let Some(error)=&job.error {
 ui.colored_label(egui::Color32::from_rgb(206,
 108,
 99),
-error);
+strata_app::i18n::message(error));
 }
 
 if let Some(description)=state.prefs.descriptions.get(&job.id).filter(|text|!text.is_empty()){
@@ -116,11 +115,11 @@ ui.label(description);
 ,
 
             1=> {
-ui.label(if job.resumable {"Verified range segments"} else {"Single-stream transfer"});
+ui.label(if job.resumable {strata_app::i18n::tr("Verified range segments")} else {strata_app::i18n::tr("Single-stream transfer")});
 for (index,
 segment) in job.segments.iter().enumerate(){
 let length=if job.resumable {segment.end.saturating_sub(segment.start).saturating_add(1)} else {job.size.unwrap_or(job.downloaded)};
-ui.label(format!("Connection {} · {} – {}",
+ui.label(strata_app::localized_format!("Connection {} · {} – {}", "Anslutning {} · {} – {}",
 index+1,
 bytes(segment.start as f64),
 bytes(segment.end as f64)));
@@ -130,7 +129,7 @@ bytes(length as f64))));
 }
 
 if job.segments.is_empty(){
-ui.label("Connections appear when the transfer starts.");
+ui.label(strata_app::i18n::tr("Connections appear when the transfer starts."));
 }
 }
 ,
@@ -146,20 +145,20 @@ delay_minutes:0}
 );
 }
 let draft=state.draft.as_mut().unwrap();
-ui.label("Download bandwidth (bytes/second; 0 = unlimited)");
+ui.label(strata_app::i18n::tr("Download bandwidth (bytes/second; 0 = unlimited)"));
 ui.add(egui::DragValue::new(&mut draft.rate).range(0..=1_000_000_000u64).speed(1024.0));
-ui.label("Queue priority (higher runs first)");
+ui.label(strata_app::i18n::tr("Queue priority (higher runs first)"));
 ui.add(egui::DragValue::new(&mut draft.priority).range(-100..=100));
 if ui.add_enabled(!matches!(job.status,
 Status::Downloading|Status::Queued|Status::Completed),
-egui::Button::new("Apply to this download")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Apply to this download"))).clicked(){
 output.push(Output::Command(Command::Configure{
 id:job.id.clone(),
 priority:draft.priority,
 bytes_per_second:draft.rate}
 ));
 }
-ui.small("Pause and wait for the transfer to stop before changing these settings.");
+ui.small(strata_app::i18n::tr("Pause and wait for the transfer to stop before changing these settings."));
 }
 ,
 
@@ -167,14 +166,14 @@ ui.small("Pause and wait for the transfer to stop before changing these settings
 let action=state.prefs.completion.entry(job.id.clone()).or_default();
 ui.radio_value(action,
 Completion::None,
-"No action");
+strata_app::i18n::tr("No action"));
 ui.radio_value(action,
 Completion::Message,
-"Show a message in StrataFetch");
+strata_app::i18n::tr("Show a message in StrataFetch"));
 ui.radio_value(action,
 Completion::OpenFolder,
-"Open the destination folder");
-ui.small("Applies only to a future completion while this desktop is running. Files are never automatically executed.");
+strata_app::i18n::tr("Open the destination folder"));
+ui.small(strata_app::i18n::tr("Applies only to a future completion while this desktop is running. Files are never automatically executed."));
 }
 ,
 
@@ -182,20 +181,20 @@ ui.small("Applies only to a future completion while this desktop is running. Fil
 
         egui::CollapsingHeader::new("Technical information").show(ui,
 |ui| {
-ui.label(format!("Download ID: {}",
+ui.label(strata_app::localized_format!("Download ID: {}", "Hämtnings-ID: {}",
 job.id));
-ui.label(format!("Validator: {}",
-job.validator.as_deref().unwrap_or("Unavailable")));
+ui.label(strata_app::localized_format!("Validator: {}", "Validerare: {}",
+job.validator.as_deref().unwrap_or(strata_app::i18n::tr("Unavailable"))));
 if let Some(hash)=&job.sha256{
 ui.label(format!("SHA-256: {hash}"));
-if ui.button("Verify file checksum").clicked(){
+if ui.button(strata_app::i18n::tr("Verify file checksum")).clicked(){
 output.push(Output::Action(Action::Verify(job.id.clone())));
 }
 }
 
 if job.status!=Status::Completed&&ui.add_enabled(!matches!(job.status,
 Status::Downloading|Status::Queued),
-egui::Button::new("Restart from beginning")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Restart from beginning"))).clicked(){
 output.push(Output::Action(Action::Restart(job.id.clone())));
 }
 }
@@ -207,7 +206,7 @@ ui.horizontal_wrapped(|ui| {
 
             if ui.add_enabled(matches!(job.status,
 Status::Paused|Status::Failed|Status::Cancelled),
-egui::Button::new("Resume")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Resume"))).clicked(){
 output.push(Output::Command(Command::Start{
 id:job.id.clone()}
 ));
@@ -215,25 +214,25 @@ id:job.id.clone()}
 
 if ui.add_enabled(matches!(job.status,
 Status::Downloading|Status::Queued),
-egui::Button::new("Pause")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Pause"))).clicked(){
 output.push(Output::Command(Command::Pause{
 id:job.id.clone()}
 ));
 }
 
 if ui.add_enabled(job.status!=Status::Completed,
-egui::Button::new("Stop")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Stop"))).clicked(){
 output.push(Output::Command(Command::Cancel{
 id:job.id.clone()}
 ));
 }
 
-if ui.button("Open folder").clicked(){
+if ui.button(strata_app::i18n::tr("Open folder")).clicked(){
 output.push(Output::Action(Action::OpenFolder(job.id.clone())));
 }
 
 if ui.add_enabled(job.status==Status::Completed,
-egui::Button::new("Open file")).clicked(){
+egui::Button::new(strata_app::i18n::tr("Open file"))).clicked(){
 output.push(Output::Action(Action::OpenFile(job.id.clone())));
 }
 

@@ -104,6 +104,7 @@ impl App {
             .unwrap_or_default();
 
         let mut state = State::new(prefs);
+        strata_app::i18n::set_swedish(state.prefs.swedish);
 
         if let Ok(font) = std::fs::read("C:/Windows/Fonts/segoeui.ttf") {
             let mut fonts = egui::FontDefinitions::default();
@@ -173,7 +174,7 @@ impl App {
 
     fn request(&mut self, request: Request) {
         if let Err(error) = self.worker.commands.try_send(request) {
-            let message = format!("Engine unavailable or busy: {error}");
+            let message = strata_app::localized_format!("Engine unavailable or busy: {error}", "Hämtningsmotorn är otillgänglig eller upptagen: {error}");
             if let Request::Probe {
                 url,
                 form_id,
@@ -206,7 +207,7 @@ impl App {
 
         std::thread::spawn(move || {
             if let Err(error) = open::that(path) {
-                let _ = errors.send(format!("Cannot open location: {error}"));
+                let _ = errors.send(strata_app::localized_format!("Cannot open location: {error}", "Det gick inte att öppna platsen: {error}"));
             }
         });
     }
@@ -458,7 +459,7 @@ impl App {
                     Completion::None => (),
 
                     Completion::Message => {
-                        self.state.message = Some(format!("Download complete: {name}"))
+                        self.state.message = Some(strata_app::localized_format!("Download complete: {name}", "Hämtningen är klar: {name}"))
                     }
 
                     Completion::OpenFolder => self.action(Action::OpenFolder(id)),
@@ -632,6 +633,10 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let language_changed = strata_app::i18n::swedish() != self.state.prefs.swedish;
+        strata_app::i18n::set_swedish(self.state.prefs.swedish);
+        if language_changed && let Some(tray) = &self.tray { tray.refresh_language(); }
+        let _ = strata_app::i18n::save_preference(self.state.prefs.swedish);
         while let Some(event) = self.tray.as_ref().and_then(|tray| tray.event()) {
             match event {
                 tray::Event::Open => {
@@ -748,7 +753,7 @@ impl eframe::App for App {
         if self.state.statistics_open {
             let mut open = true;
 
-            egui::Window::new("Transfer statistics")
+            egui::Window::new(strata_app::i18n::tr("Transfer statistics"))
                 .open(&mut open)
                 .default_width(500.0)
                 .show(&ctx, |ui| {
@@ -759,10 +764,10 @@ impl eframe::App for App {
                         .map(|j| j.speed)
                         .sum();
 
-                    ui.label(format!("Current aggregate: {}/s", bytes(speed)));
+                    ui.label(strata_app::localized_format!("Current aggregate: {}/s", "Aktuell totalhastighet: {}/s", bytes(speed)));
 
-                    ui.label(format!(
-                        "Completed files: {}",
+                    ui.label(strata_app::localized_format!(
+                        "Completed files: {}", "Färdiga filer: {}",
                         self.jobs
                             .iter()
                             .filter(|j| j.status == Status::Completed)
@@ -796,7 +801,7 @@ impl eframe::App for App {
                     }
 
                     ui.small(
-                        "Last 90 measured one-second samples; no lifetime throughput estimate.",
+                        strata_app::i18n::tr("Last 90 measured one-second samples; no lifetime throughput estimate."),
                     );
                 });
 
@@ -804,24 +809,24 @@ impl eframe::App for App {
         }
 
         if let Some(ids) = self.state.remove.clone() {
-            egui::Window::new("Remove download history?")
+            egui::Window::new(strata_app::i18n::tr("Remove download history?"))
                 .collapsible(false)
                 .show(&ctx, |ui| {
-                    ui.label(format!(
-                        "Remove {} inactive records and their partial data?",
+                    ui.label(strata_app::localized_format!(
+                        "Remove {} inactive records and their partial data?", "Vill du ta bort {} inaktiva poster och deras ofullständiga data?",
                         ids.len()
                     ));
 
-                    ui.label("Completed files are kept.");
+                    ui.label(strata_app::i18n::tr("Completed files are kept."));
 
                     ui.horizontal(|ui| {
-                        if ui.button("Remove").clicked() {
+                        if ui.button(strata_app::i18n::tr("Remove")).clicked() {
                             self.batch(ids, BatchAction::Remove);
 
                             self.state.remove = None;
                         }
 
-                        if ui.button("Cancel").clicked() {
+                        if ui.button(strata_app::i18n::tr("Cancel")).clicked() {
                             self.state.remove = None;
                         }
                     });
@@ -833,7 +838,7 @@ impl eframe::App for App {
                 .collapsible(false)
                 .default_width(420.0)
                 .show(&ctx, |ui| {
-                    ui.add(egui::Label::new(message).wrap());
+                    ui.add(egui::Label::new(strata_app::i18n::message(&message)).wrap());
 
                     if ui.button("OK").clicked() {
                         self.state.message = None;

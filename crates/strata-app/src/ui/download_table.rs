@@ -241,8 +241,8 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                             };
 
                             if ui
-                                .selectable_label(state.sort == *column, label)
-                                .on_hover_text("Click to sort. Drag the column boundary to resize.")
+                                .selectable_label(state.sort == *column,strata_app::i18n::tr(&label))
+                                .on_hover_text(strata_app::i18n::tr("Click to sort. Drag the column boundary to resize."))
                                 .clicked()
                             {
                                 if state.sort == *column {
@@ -310,7 +310,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                                         ui.label(
                                             job.size
                                                 .map(|n| bytes(n as f64))
-                                                .unwrap_or_else(|| "Unknown".into()),
+                                                .unwrap_or_else(|| strata_app::i18n::tr("Unknown").into()),
                                         );
                                     }
 
@@ -451,7 +451,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                                 ("Stop selected", Action::Stop),
                                 ("Remove selected…", Action::Remove),
                             ] {
-                                if ui.button(label).clicked() {
+                                if ui.button(strata_app::i18n::tr(&label)).clicked() {
                                     actions.push(action);
 
                                     ui.close();
@@ -463,7 +463,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                             if ui
                                 .add_enabled(
                                     job.status == Status::Completed,
-                                    egui::Button::new("Open file"),
+                                    egui::Button::new(strata_app::i18n::tr("Open file")),
                                 )
                                 .clicked()
                             {
@@ -472,7 +472,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                                 ui.close();
                             }
 
-                            if ui.button("Open folder").clicked() {
+                            if ui.button(strata_app::i18n::tr("Open folder")).clicked() {
                                 actions.push(Action::OpenFolder(job.id.clone()));
 
                                 ui.close();

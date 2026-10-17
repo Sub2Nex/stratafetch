@@ -4,6 +4,33 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {createHash,webcrypto} from 'node:crypto';
 const read = (folder,file) => readFileSync(new URL('../extensions/'+folder+'/'+file,import.meta.url),'utf8');
+for (const folder of ['chromium', 'firefox']) {
+  for (const [settings, item, accepted] of [
+    [{captureMinBytes: 1048576}, {totalBytes: 100}, false],
+    [{captureMinBytes: 1048576}, {totalBytes: -1}, false],
+    [{captureMinBytes: 1048576}, {totalBytes: 2097152}, true],
+    [{captureExtensions: ['iso']}, {filename: 'file.zip'}, false],
+    [{captureExtensions: ['zip']}, {filename: 'FILE.ZIP'}, true],
+    [{captureExtensions: ['tar.gz']}, {filename: 'backup.tar.gz'}, true],
+    [{captureMinBytes: -1}, {}, false],
+    [{captureExtensions: ['../exe']}, {}, false]
+  ]) {
+    test(folder+': automatic capture filters '+JSON.stringify([settings,item]),async()=>{
+      const b=background(folder,{stored:settings,item});
+      await b.hooks.created(b.item);
+      assert.equal(b.calls.some(call=>call.payload?.action==='capture'),accepted);
+      if (!accepted) assert.equal(b.calls.some(call=>call.op==='pause'),false,'filtered downloads never pause the browser');
+    });
+  }
+  test(folder+': Swedish locale follows app override and preserves filenames',()=>{
+    const scope={chrome:{i18n:{getUILanguage:()=> 'sv-SE'}}};
+    runInNewContext(read(folder,'locale.js'),scope);
+    assert.equal(scope.StrataLocale.t('Download with StrataFetch'),'Hämta med StrataFetch');
+    assert.equal(scope.StrataLocale.t('Added: {name}',{name:'My English File.zip'}),'Tillagd: My English File.zip');
+    scope.StrataLocale.setLanguage('en');
+    assert.equal(scope.StrataLocale.t('Download with StrataFetch'),'Download with StrataFetch');
+  });
+}
 function background(folder, options={}) {
   const calls=[], hooks={}, stored={...(options.stored || {})};
   let enabled=options.enabled ?? true;
@@ -23,6 +50,7 @@ function background(folder, options={}) {
     }},
     storage:{local:{async get(keys){return keys===null?{capture:enabled,...stored}:{...keys,...stored,capture:enabled};},async set(value){if ("capture" in value) enabled=value.capture;Object.assign(stored,value);},async remove(key){delete stored[key];}}},
     contextMenus:{async removeAll(){},create(value){calls.push({op:'menu',value});},onClicked:{addListener(fn){hooks.clicked=fn;}}},
+    webRequest:{onBeforeRequest:{addListener(fn){hooks.request=fn;}}},
     downloads:{
       onCreated:{addListener(fn){hooks.created=fn;}},
       onChanged:{addListener(fn){hooks.changed=fn;}},
@@ -40,6 +68,38 @@ function background(folder, options={}) {
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
+  for (const accept of [false, true]) {
+    test(folder+': observed GET stops unknown-size query download before choice without probe '+accept,async()=>{
+      const b=background(folder,{item:{url:'https://example.org/download?file=installer',totalBytes:-1}});
+      b.hooks.request({requestId:'get-1',url:b.item.url,method:'GET'});
+      let receive,disconnect;const sent=[];
+      b.api.runtime.connectNative=()=>({onMessage:{addListener(f){receive=f;}},onDisconnect:{addListener(f){disconnect=f;}},postMessage(p){sent.push(p);},disconnect(){disconnect();}});
+      const capture=b.hooks.created(b.item);
+      while(!sent.length || b.item.state!=='interrupted')await new Promise(r=>setImmediate(r));
+      assert.equal(b.calls.some(c=>c.op==='probe'),false,'no network preflight before stopping Chrome');
+      assert.equal(sent.some(p=>p.action==='commitCapture'),false);
+      // An external resume notification cannot revive a cancelled request.
+      b.hooks.changed({id:7,paused:{current:false}});
+      if(accept){
+        receive({ok:true,confirmation:'accepted'});
+        while(!sent.some(p=>p.action==='commitCapture'))await new Promise(r=>setImmediate(r));
+        receive({ok:true,download:{id:'native-id'}});
+      }else receive({ok:false,declined:true});
+      await capture;
+      assert.equal(b.calls.filter(c=>c.op==='browser-download').length,accept?0:1);
+      assert.equal(b.calls.some(c=>c.op==='resume'),false);
+      if(!accept) assert.equal(b.calls.find(c=>c.op==='browser-download').options.url,b.item.url);
+    });
+  }
+  test(folder+': observed POST and POST-to-GET redirect stay entirely in browser',async()=>{
+    for(const redirect of [false,true]) {
+      const b=background(folder);
+      b.hooks.request({requestId:'post',url:b.item.url,method:'POST'});
+      if(redirect)b.hooks.request({requestId:'post',url:b.item.url,method:'GET'});
+      await b.hooks.created(b.item);
+      assert.equal(b.calls.some(c=>['pause','cancel','probe','native'].includes(c.op)),false);
+    }
+  });
   for(const accept of [false,true]) {
     test(folder+': verified public request stops before choice; accept='+accept,async()=>{
       const b=background(folder,{replayable:true});let receive,disconnect;const sent=[];
@@ -286,10 +346,10 @@ for(const folder of ['chromium','firefox']) {
     assert.match(elements.status.textContent,/Connected/);
     assert.match(elements['last-issue'].textContent,/Last handoff issue: Opening browser bridge: Host exited/);
   });
-  test(folder+': only native/download/storage permissions, no cookies or broad page access',()=>{
+  test(folder+': request methods require host access but never cookies, bodies or page scripts',()=>{
     const m=JSON.parse(read(folder,'manifest.json'));
-    assert.deepEqual(m.permissions.slice().sort(),['activeTab','contextMenus','downloads','nativeMessaging','storage']);
-    assert.equal(m.host_permissions,undefined);assert.equal(m.content_scripts,undefined);
+    assert.deepEqual(m.permissions.slice().sort(),['activeTab','contextMenus','downloads','nativeMessaging','storage','webRequest']);
+    assert.deepEqual(m.host_permissions,['http://*/*','https://*/*']);assert.equal(m.content_scripts,undefined);
   });
   test(folder+': installation preserves disabled capture',async()=>{
     const b=background(folder,{enabled:false});await b.hooks.installed();assert.equal(b.enabled(),false);

@@ -20,7 +20,7 @@ pub fn show(name: String, source: String, destination: String) -> Result<bool> {
         persist_window: false,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("org.stratafetch.confirmation")
-            .with_title("Download with StrataFetch")
+            .with_title(crate::i18n::tr("Download with StrataFetch"))
             .with_inner_size([560.0, 330.0])
             .with_min_inner_size([460.0, 300.0])
             .with_active(true)
@@ -100,13 +100,13 @@ pub(crate) fn windows_dialog_cancellable(
     if cancelled.load(Ordering::Acquire) {
         return Ok(false);
     }
-    let title = wide("Download with StrataFetch");
-    let heading = wide("Download this file?");
-    let content = wide(&format!(
-        "{name}\n\nFrom: {source}\nSave to: {destination}\n\nChoose StrataFetch or keep the file in your browser."
+    let title = wide(crate::i18n::tr("Download with StrataFetch"));
+    let heading = wide(crate::i18n::tr("Download this file?"));
+    let content = wide(&crate::localized_format!(
+        "{name}\n\nFrom: {source}\nSave to: {destination}\n\nChoose StrataFetch or keep the file in your browser.", "{name}\n\nFrån: {source}\nSpara i: {destination}\n\nVälj StrataFetch eller behåll filen i webbläsaren."
     ));
-    let accept = wide("Download with StrataFetch");
-    let keep = wide("Keep in browser");
+    let accept = wide(crate::i18n::tr("Download with StrataFetch"));
+    let keep = wide(crate::i18n::tr("Keep in browser"));
     let buttons = [
         TASKDIALOG_BUTTON {
             nButtonID: 100,
@@ -201,24 +201,24 @@ impl Confirmation {
         let buttons = egui::CentralPanel::default()
             .show(root, |ui| {
                 ui.add_space(10.0);
-                ui.heading(egui::RichText::new("Download this file?").color(egui::Color32::WHITE));
+                ui.heading(egui::RichText::new(crate::i18n::tr("Download this file?")).color(egui::Color32::WHITE));
                 ui.add_space(12.0);
                 egui::ScrollArea::vertical()
                     .max_height((ui.available_height() - 100.0).max(100.0))
                     .show(ui, |ui| {
                         ui.strong(&self.name);
                         ui.add_space(10.0);
-                        ui.label(format!("From: {}", self.source));
-                        ui.label(format!("Save to: {}", self.destination));
+                        ui.label(crate::localized_format!("From: {}", "Från: {}", self.source));
+                        ui.label(crate::localized_format!("Save to: {}", "Spara i: {}", self.destination));
                     });
                 ui.add_space(12.0);
-                ui.label("The browser download stays paused while you decide.");
+                ui.label(crate::i18n::tr("The browser download stays paused while you decide."));
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     let download = ui.add_sized(
                         [240.0, 34.0],
                         egui::Button::new(
-                            egui::RichText::new("Download with StrataFetch")
+                            egui::RichText::new(crate::i18n::tr("Download with StrataFetch"))
                                 .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(35, 125, 103)),
@@ -227,7 +227,7 @@ impl Confirmation {
                         self.accepted.store(true, Ordering::Relaxed);
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
-                    let keep = ui.add_sized([180.0, 34.0], egui::Button::new("Keep in browser"));
+                    let keep = ui.add_sized([180.0, 34.0], egui::Button::new(crate::i18n::tr("Keep in browser")));
                     if self.first_frame {
                         keep.request_focus();
                     }

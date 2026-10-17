@@ -6,61 +6,8 @@ use std::collections::{HashMap, HashSet};
 
 use strata_core::{Job, Settings, Status};
 
-/// Core interface labels; advanced explanations currently remain in English.
-pub fn text(swedish: bool, label: &str) -> &str {
-    if !swedish {
-        return label;
-    }
-    match label {
-        "File" => "Arkiv",
-        "Downloads" => "Hämtningar",
-        "Tools" => "Verktyg",
-        "View" => "Visa",
-        "Add URL" => "Lägg till URL",
-        "Resume" => "Återuppta",
-        "Pause" => "Pausa",
-        "Stop" => "Stoppa",
-        "Stop all" => "Stoppa alla",
-        "Remove" => "Ta bort",
-        "Clear finished" => "Rensa färdiga",
-        "Scheduler" => "Schemaläggare",
-        "Start queue" => "Starta kö",
-        "Stop queue" => "Stoppa kö",
-        "Settings" => "Inställningar",
-        "Search downloads" => "Sök hämtningar",
-        "All downloads" => "Alla hämtningar",
-        "Unfinished" => "Ofärdiga",
-        "All unfinished" => "Alla ofärdiga",
-        "Finished" => "Färdiga",
-        "Downloading" => "Hämtar",
-        "Queued" => "I kö",
-        "Paused" => "Pausad",
-        "Failed" => "Misslyckad",
-        "Stopped" => "Stoppad",
-        "Complete" => "Färdig",
-        "Categories" => "Kategorier",
-        "Queues" => "Köer",
-        "General" => "Allmänt",
-        "Compressed" => "Komprimerat",
-        "Documents" => "Dokument",
-        "Music" => "Musik",
-        "Programs" => "Program",
-        "Images" => "Bilder",
-        "Main queue" => "Huvudkö",
-        "Scheduled" => "Schemalagda",
-        "Name" => "Namn",
-        "Size" => "Storlek",
-        "Progress" => "Förlopp",
-        "Speed" => "Hastighet",
-        "Time left" => "Tid kvar",
-        "Connections" => "Anslutningar",
-        "Added (UTC)" => "Tillagd (UTC)",
-        "Category" => "Kategori",
-        "Source" => "Källa",
-        "Downloaded" => "Hämtat",
-        _ => label,
-    }
-}
+/// Shared interface translations; persisted category/status values remain stable.
+pub fn text(swedish: bool, label: &str) -> &str { strata_app::i18n::text(swedish, label) }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Column {
@@ -186,7 +133,7 @@ impl Default for Preferences {
 
             dark: true,
 
-            swedish: false,
+            swedish: strata_app::i18n::preferred_swedish(),
 
             sidebar: true,
 
@@ -651,7 +598,7 @@ pub fn added(timestamp: u64) -> String {
 }
 
 pub fn status(s: Status) -> &'static str {
-    match s {
+    strata_app::i18n::tr(match s {
         Status::Completed => "Complete",
 
         Status::Downloading => "Downloading",
@@ -663,7 +610,7 @@ pub fn status(s: Status) -> &'static str {
         Status::Cancelled => "Stopped",
 
         Status::Failed => "Failed",
-    }
+    })
 }
 
 pub fn modifiers(ctx: &egui::Context) -> (bool, bool) {

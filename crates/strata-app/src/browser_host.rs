@@ -110,7 +110,7 @@ fn run() -> Result<()> {
                     })
                     .unwrap_or(0);
                 return Ok(
-                    serde_json::json!({"ok":true,"running":reply.is_some(),"active":active,"bridgeVersion":env!("CARGO_PKG_VERSION")}),
+                    serde_json::json!({"ok":true,"running":reply.is_some(),"active":active,"bridgeVersion":env!("CARGO_PKG_VERSION"),"language":strata_app::i18n::language()}),
                 );
             }
             let command = match message.action.as_str() {

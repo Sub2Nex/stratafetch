@@ -1,9 +1,32 @@
+if (typeof importScripts === "function" && typeof StrataLocale === "undefined") importScripts("locale.js");
 const api = typeof browser !== "undefined" ? browser : chrome;
+const locale = globalThis.StrataLocale || {t: value => value, setLanguage() {}};
 const pending = new Set();
 const pauseLeases = new Map();
 let recovery;
 let captureQueue = Promise.resolve();
 let eventWrites = Promise.resolve();
+// Observe methods only; never request cookies, authorization headers or bodies.
+// MV3 webRequest cannot block responses, but tells us whether a cancelled
+// download can be restarted as a GET instead of replaying a form submission.
+const requests = new Map();
+function observeRequest(details) {
+  const now = Date.now();
+  for (const [id, value] of requests) if (now - value.time > 60000) requests.delete(id);
+  if (details.incognito || !/^https?:\/\//i.test(details.url)) return;
+  const previous = requests.get(details.requestId);
+  requests.set(details.requestId, {time: now, get: details.method === "GET" && (!previous || previous.get),
+    urls: [...new Set([...(previous?.urls || []), details.url])].slice(-12)});
+  if (requests.size > 512) requests.delete(requests.keys().next().value);
+}
+if (api.webRequest?.onBeforeRequest) {
+  api.webRequest.onBeforeRequest.addListener(observeRequest, {urls: ["http://*/*", "https://*/*"]});
+}
+function requestMethod(item) {
+  const matches = [...requests.values()].filter(value => Date.now() - value.time <= 60000
+    && (value.urls.includes(item.url) || value.urls.includes(item.finalUrl)));
+  return !matches.length ? "unknown" : matches.every(value => value.get) ? "GET" : "other";
+}
 function recordEvent(event, item, nativeId) {
   const entry = {event, timestamp: Date.now(), downloadId: item.id};
   if (item.state) entry.state = String(item.state).slice(0, 32);
@@ -68,7 +91,9 @@ function nativeRequest(payload, beforeCommit) {
 }
 api.runtime.onInstalled.addListener(async () => {
   await api.contextMenus.removeAll();
-  api.contextMenus.create({ id: "stratafetch", title: "Download with StrataFetch", contexts: ["link"] });
+  const saved = await api.storage.local.get({appLanguage: null});
+  locale.setLanguage(saved.appLanguage);
+  api.contextMenus.create({ id: "stratafetch", title: locale.t("Download with StrataFetch"), contexts: ["link"] });
   const settings = await api.storage.local.get({ capture: true });
   await api.storage.local.set({ capture: settings.capture });
 });
@@ -164,12 +189,31 @@ function excluded(url, rules) {
     return Array.isArray(rules) && rules.some(rule => typeof rule === "string" && rule && (host === rule || host.endsWith("." + rule)));
   } catch { return true; }
 }
+function matchesCaptureFilters(item, settings) {
+  const minimum = settings.captureMinBytes ?? 0;
+  const types = settings.captureExtensions ?? [];
+  if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 1099511627776 || !Array.isArray(types) || types.length > 100) return false;
+  if (minimum && (!Number.isSafeInteger(item.totalBytes) || item.totalBytes < minimum)) return false;
+  if (!types.length) return true;
+  try {
+    const name = (item.filename || decodeURIComponent(new URL(item.finalUrl || item.url).pathname)).split(/[\\/]/).pop().toLowerCase();
+    return types.every(type => typeof type === "string" && /^[a-z0-9]+(?:\.[a-z0-9]+)*$/.test(type) && type.length <= 32)
+      && types.some(type => name.endsWith("." + type));
+  } catch { return false; }
+}
 api.runtime.onMessage.addListener((message, _sender, respond) => {
   if (!message || !["capture", "ping"].includes(message.action)) return false;
   const payload = message.action === "ping" ? {action: "ping"} : {action: "capture", url: message.url};
   // The background owns the native port even when opening the confirmation
   // closes the extension popup.
-  const reply = value => { try { respond(value); } catch { /* The popup may have closed. */ } };
+  const reply = value => {
+    if (value?.language === "sv" || value?.language === "en") {
+      locale.setLanguage(value.language);
+      api.storage.local.set({appLanguage: value.language}).catch(() => {});
+      if (api.contextMenus.update) Promise.resolve(api.contextMenus.update("stratafetch", {title: locale.t("Download with StrataFetch")})).catch(() => {});
+    }
+    try { respond(value); } catch { /* The popup may have closed. */ }
+  };
   nativeMessage(payload).then(reply, error => reply({ok: false, error: "Browser bridge: " + safeIssue(error)}));
   return true;
 });
@@ -230,8 +274,10 @@ async function intercept(item) {
     return current;
   };
   try {
-    const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
-    if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
+    const settings = await api.storage.local.get({ capture: true, excludedDomains: [], captureMinBytes: 0, captureExtensions: [] });
+    if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains) || !matchesCaptureFilters(item, settings)) return;
+    // A POST must keep its original request, rather than being converted to GET.
+    if (requestMethod(item) === "other") return;
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: String(item.startTime || ""), timestamp: Date.now()}});
     phase = "Opening browser bridge";
     recordEvent("pause_requested", item);
@@ -242,12 +288,19 @@ async function intercept(item) {
       if (exclusiveProbe || exclusive || !lease.active()) return exclusiveProbe;
       exclusiveProbe = (async () => {
         const current = await checked();
-        if (current.state !== "in_progress" || !Number.isSafeInteger(current.totalBytes) || current.totalBytes <= 0) return;
+        if (current.state !== "in_progress") return;
         const url = current.finalUrl || current.url;
-        const parsed = new URL(url);
-        if (parsed.protocol !== "https:" || parsed.search) return;
-        const reply = await api.runtime.sendNativeMessage("org.stratafetch.host", {action: "probeReplay", url, size: current.totalBytes, ...(current.mime ? {mime: current.mime} : {})});
-        if (!reply?.replayable || !lease.active()) return;
+        const method = requestMethod(current);
+        if (method === "other") return;
+        if (method !== "GET") {
+          // Requests begun before extension reload have no method observation.
+          // Preserve the old request unless anonymous replay can be verified.
+          const parsed = new URL(url);
+          if (parsed.protocol !== "https:" || parsed.search || !Number.isSafeInteger(current.totalBytes) || current.totalBytes <= 0) return;
+          const reply = await api.runtime.sendNativeMessage("org.stratafetch.host", {action: "probeReplay", url, size: current.totalBytes, ...(current.mime ? {mime: current.mime} : {})});
+          if (!reply?.replayable) return;
+        }
+        if (!lease.active()) return;
         cancelWork = (async () => {
           const latest = await checked();
           if (!lease.active() || latest.state !== "in_progress") return;
@@ -268,10 +321,10 @@ async function intercept(item) {
     lease.ensure().then(current => recordEvent(current.state === "complete" ? "browser_completed" : "browser_paused", current)).catch(() => {});
     const reply = await queuedCapture(async () => {
       const current = await checked();
-      const settings = await api.storage.local.get({capture: true, excludedDomains: []});
+      const settings = await api.storage.local.get({capture: true, excludedDomains: [], captureMinBytes: 0, captureExtensions: []});
       ownedStartTime = String(current.startTime || "");
       await api.storage.local.set({["capture_pending_" + item.id]: record()});
-      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
+      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains) || !matchesCaptureFilters(current, settings)) throw new Error("Automatic capture disabled for this download");
       const payload = { action: "capture", url: current.finalUrl || current.url };
       const filename = (current.filename || item.filename || "").split(/[\\/]/).pop();
       if (filename) payload.name = filename;
@@ -285,8 +338,8 @@ async function intercept(item) {
       await lease.tryExclusive();
       const current = exclusive ? await checked() : await lease.ensure();
       if (exclusive && current.state === "in_progress") throw new Error("Browser cancellation was not confirmed; native download was not started");
-      const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
+      const settings = await api.storage.local.get({capture: true, excludedDomains: [], captureMinBytes: 0, captureExtensions: []});
+      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains) || !matchesCaptureFilters(current, settings)) throw new Error("Automatic capture disabled for this download");
       recordEvent("native_commit_authorized", current);
       if (current.state === "complete") {
         if (!current.filename || current.exists === false || !Number.isSafeInteger(current.fileSize) || current.fileSize < 0) throw new Error("Completed browser file cannot be verified");
@@ -386,7 +439,7 @@ async function showResult(ok, message) {
     ok ? api.storage.local.remove("lastHandoffError") : api.storage.local.set({lastHandoffError: {message: detail, timestamp: Date.now()}}),
     api.action.setBadgeText({ text: ok ? "+" : "!" }),
     api.action.setBadgeBackgroundColor({ color: ok ? "#237d67" : "#a33030" }),
-    api.action.setTitle({ title: `StrataFetch: ${detail}` }),
+    api.action.setTitle({ title: `StrataFetch: ${locale.error ? locale.error(detail) : detail}` }),
   ]);
 }
 

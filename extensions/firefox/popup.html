@@ -10,19 +10,19 @@
 .capture{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid #293748;border-radius:10px;background:#151f2c;cursor:pointer}.capture strong{display:block;font-size:13px;font-weight:600}.capture small{display:block;margin-top:3px;color:#a4b4c6;font-size:11px}
 #capture{appearance:none;position:relative;width:34px;height:20px;flex:0 0 34px;margin:0;border:1px solid #506075;border-radius:20px;background:#344255;cursor:pointer}#capture::before{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:#dce5ef}#capture:checked{background:#49ccc2;border-color:#49ccc2}#capture:checked::before{left:17px;background:#10202b}
 section{margin:18px 0}.field-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}label,summary{font-weight:600}
-input[type=url],textarea{width:100%;padding:10px 11px;border:1px solid #38495e;border-radius:7px;background:#0b121c;color:#e8eef5;font:inherit}input::placeholder,textarea::placeholder{color:#8496ab;opacity:1}textarea{resize:vertical;min-height:72px;max-height:160px;margin-top:7px}
+input[type=url],input[type=text],input[type=number],textarea{width:100%;padding:10px 11px;border:1px solid #38495e;border-radius:7px;background:#0b121c;color:#e8eef5;font:inherit}input::placeholder,textarea::placeholder{color:#8496ab;opacity:1}textarea{resize:vertical;min-height:72px;max-height:160px;margin-top:7px}
 button{border:1px solid #38495e;border-radius:7px;padding:8px 12px;background:#1e2c3d;color:#e8eef5;font:inherit;font-weight:600;cursor:pointer}button:hover{background:#2a3c50}button:disabled{opacity:.55;cursor:wait}
 #send{width:100%;margin-top:9px;padding:10px;border-color:#49ccc2;background:#49ccc2;color:#092027}#send:hover{background:#73ded5;border-color:#73ded5}
 #current{min-height:28px;padding:4px 2px;border:0;background:transparent;color:#8ddcd5;font-size:11px}#current:hover{color:#c1f6f1;text-decoration:underline}
 :is(button,input,textarea,summary):focus-visible{outline:2px solid #8ce4dc;outline-offset:3px}
-details{border-top:1px solid #293748}summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;cursor:pointer;list-style:none;color:#c8d6e5;font-size:12px}summary::-webkit-details-marker{display:none}summary::after{content:"+";color:#92a6bd;font-size:16px;font-weight:400}details[open]>summary::after{content:"−"}
+details{border-top:1px solid #293748}summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;cursor:pointer;list-style:none;color:#c8d6e5;font-size:12px}summary::-webkit-details-marker{display:none}summary::after{content:"+";color:#92a6bd;font-size:16px;font-weight:400}details[open]>summary::after{content:"âˆ’"}
 .details-body{padding:0 0 14px}.hint{margin:7px 0 10px;color:#a4b4c6;font-size:11px}.actions{display:flex;justify-content:flex-end}#handoff-events{white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto;padding:10px;border-radius:7px;background:#0b121c;color:#b9c9db;font-size:10px}.diagnostics{color:#a4b4c6;font-size:11px}
 @media(forced-colors:active){#capture{appearance:auto}#capture::before{display:none}}
 </style>
 </head>
 <body>
 <header><img src="icons/48.png" alt="" width="36" height="36"><div><h1>StrataFetch</h1><p>Your browser, your download manager.</p></div></header>
-<p id="status" role="status" aria-live="polite">Connecting…</p>
+<p id="status" role="status" aria-live="polite">Connectingâ€¦</p>
 <p id="last-issue" role="status" aria-live="polite"></p>
 <label class="capture" for="capture"><span><strong>Catch browser downloads</strong><small>Ask before sending files to StrataFetch.</small></span><input id="capture" type="checkbox" role="switch" checked></label>
 <section aria-labelledby="url-label">
@@ -35,10 +35,16 @@ details{border-top:1px solid #293748}summary{display:flex;align-items:center;jus
 <p id="excluded-hint" class="hint">One domain per line. Subdomains are included. Manual links still work.</p>
 <div class="actions"><button id="save-excluded" type="button">Save exclusions</button></div>
 </div></details>
+<details><summary>Capture filters</summary><div class="details-body">
+<label for="capture-minimum">Minimum file size (MiB)</label><input id="capture-minimum" type="number" min="0" max="1048576" step="any" value="0">
+<label for="capture-types">File extensions (optional)</label><input id="capture-types" type="text" placeholder="zip, exe, iso" autocomplete="off" spellcheck="false">
+<p class="hint">Leave empty for all supported files. Unknown sizes stay in the browser when a minimum is set.</p>
+<div class="actions"><button id="save-filters" type="button">Save filters</button></div>
+</div></details>
 <details><summary>Help &amp; diagnostics</summary><div class="details-body">
 <p class="hint">Choose StrataFetch or keep a download in your browser. Verified public downloads stop while you choose; keeping them in the browser restarts the request. Other downloads keep their original browser request.</p>
 <p class="hint">Private downloads, page exports and extension packages stay in the browser. Cookies are never copied.</p>
 <span class="diagnostics">Recent handoff events</span><pre id="handoff-events"></pre>
 </div></details>
-<script src="popup.js"></script>
+<script src="locale.js"></script><script src="popup.js"></script>
 </body></html>

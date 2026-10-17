@@ -51,9 +51,9 @@ pub fn show(root: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action>
                 });
             }
 
-            ui.menu_button("View", |ui| {
-                ui.checkbox(&mut state.prefs.sidebar, "Navigation tree");
-                if ui.button("Choose / reorder columns…").clicked() {
+            ui.menu_button(strata_app::i18n::tr("View"), |ui| {
+                ui.checkbox(&mut state.prefs.sidebar, strata_app::i18n::tr("Navigation tree"));
+                if ui.button(strata_app::i18n::tr("Choose / reorder columns…")).clicked() {
                     actions.push(Action::Columns);
                     ui.close();
                 }
@@ -62,7 +62,7 @@ pub fn show(root: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action>
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let response = ui.add(
                     egui::TextEdit::singleline(&mut state.search)
-                        .hint_text(text(state.prefs.swedish, "Search downloads"))
+                        .hint_text(text(state.prefs.swedish, strata_app::i18n::tr("Search downloads")))
                         .desired_width(210.0),
                 );
                 state.search_focused = response.has_focus();
@@ -184,6 +184,7 @@ actions.push(action);
 }
 
 fn shortcut(label: &str) -> String {
+    let label = strata_app::i18n::tr(label);
     if cfg!(target_os = "macos") {
         label.replace("Ctrl+", "⌘")
     } else {

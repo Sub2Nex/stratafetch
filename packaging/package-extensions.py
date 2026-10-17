@@ -48,7 +48,7 @@ for folder, name, store in [
             manifest['key'] = stores[store]['public_key']
     archive = args.output/name
     with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
-        for file in ['manifest.json', 'background.js', 'popup.html', 'popup.js', *sorted(set(manifest['icons'].values()))]:
+        for file in ['manifest.json', 'locale.js', '_locales/en/messages.json', '_locales/sv/messages.json', 'background.js', 'popup.html', 'popup.js', *sorted(set(manifest['icons'].values()))]:
             # Normalize source text so Windows editor BOMs cannot break manifests.
             data = (json.dumps(manifest, indent=2)+'\n').encode() if file == 'manifest.json' else (directory/file).read_bytes()
             if not file.endswith('.png'):

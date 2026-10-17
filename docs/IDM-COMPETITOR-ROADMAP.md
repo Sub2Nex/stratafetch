@@ -30,4 +30,6 @@ Updated 2026-10-16. Direct user priorities for this increment: universal icon, c
 
 ## This increment
 
+2026-10-17, beta.11: added the shared English/Swedish interface catalogue, native/extension/installer language synchronization, browser file-type/minimum-size controls and manual/batch duplicate protection. Automated browser, native/UI, engine, packaging and localization checks cover these changes. Native browser capture ownership remains separate. These additions do not establish acceleration, media support or measured IDM parity; the remaining milestones above still apply.
+
 Prioritized Windows browser repair and release consistency before modifying engine concurrency. Replacing engine scheduling in the same branding/updater release would mix independent risks. Milestone 1 begins next with planner/work-queue fixtures; none of its missing capabilities or benchmark claims is marked complete here.

@@ -15,8 +15,8 @@ fn main() -> eframe::Result {
     if let Some(result) = strata_app::updates::apply_update_if_requested() {
         if let Err(error) = result {
             rfd::MessageDialog::new()
-                .set_title("StrataFetch update failed")
-                .set_description(format!("{error:#}\nRun the full Windows setup again if components remain unavailable. Download history is preserved."))
+                .set_title(strata_app::i18n::tr("StrataFetch update failed"))
+                .set_description(strata_app::localized_format!("{error:#}\nRun the full Windows setup again if components remain unavailable. Download history is preserved.", "{error:#}\nKör hela Windows-installationen igen om komponenter fortfarande saknas. Hämtningshistoriken behålls."))
                 .set_level(rfd::MessageLevel::Error)
                 .show();
         }
@@ -30,7 +30,7 @@ fn main() -> eframe::Result {
             Ok(None) => return Ok(()),
             Err(error) => {
                 rfd::MessageDialog::new()
-                    .set_title("Cannot open StrataFetch")
+                    .set_title(strata_app::i18n::tr("Cannot open StrataFetch"))
                     .set_description(format!("{error:#}"))
                     .set_level(rfd::MessageLevel::Error)
                     .show();

@@ -52,7 +52,7 @@ The manifest requires Firefox 142+ and declares `browsingActivity`, `websiteActi
 
 **Description:**
 
-StrataFetch connects browser downloads to the free, open-source StrataFetch desktop download manager. When an eligible HTTP or HTTPS download starts, the extension pauses the browser copy and asks whether to download with StrataFetch. Choose Download to open the app and start the transfer, or Keep in browser to continue normally. The browser copy is cancelled only after StrataFetch acknowledges receiving file data. Failed handoffs resume the browser copy.
+StrataFetch connects browser downloads to the free, open-source StrataFetch desktop download manager. When an eligible HTTP or HTTPS download starts, the extension pauses the browser copy and asks whether to download with StrataFetch. Choose Download to open the app and start the transfer, or Keep in browser to continue normally. Identified GET transfers are cancelled while you choose; Keep in browser or failed handoff restarts through the browser. POST requests remain in the browser. Requests begun before extension reload retain the conservative pause fallback.
 
 Automatic capture is enabled initially and can be switched off in the popup. You can also send a direct link from its context menu or the popup. Install the matching full desktop package and register its native bridge in Settings → Browser integration first. No account is required.
 
@@ -68,7 +68,8 @@ Download information is passed to the local app and the chosen download server. 
 
 ## Permission explanations
 
-- `downloads`: observe new downloads, pause for confirmation, cancel after acknowledgment and resume on fallback. Only owned download IDs are changed.
+- `downloads`: observe eligible downloads, stop identified GET transfers during confirmation, restart on decline/failure, and adopt completed files only after consent. Only owned IDs are changed.
+- `webRequest` and HTTP/HTTPS host access: observe request URL and method briefly to distinguish restartable GET downloads from POST. No headers, bodies or page scripts are accessed.
 - `nativeMessaging`: connect to the registered local StrataFetch app; pass download URL/name/size/type and receive status.
 - `contextMenus`: offer Download with StrataFetch on a link.
 - `activeTab`: read the current tab URL when the user presses Use current page URL.

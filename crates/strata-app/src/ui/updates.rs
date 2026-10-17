@@ -87,7 +87,7 @@ impl Updater {
             self.busy = false;
             match event {
                 Event::Checked(Ok(Some(release))) => {
-                    self.message = format!("StrataFetch {} is available.", release.tag_name);
+                    self.message = strata_app::localized_format!("StrataFetch {} is available.", "StrataFetch {} är tillgänglig.", release.tag_name);
                     self.release = Some(release);
                     self.open = true;
                 }
@@ -98,7 +98,7 @@ impl Updater {
                     self.open = true;
                 }
                 Event::Checked(Err(error)) | Event::Downloaded(Err(error)) => {
-                    self.message = format!("Update failed: {error}. You can try again.");
+                    self.message = strata_app::localized_format!("Update failed: {error}. You can try again.", "Uppdateringen misslyckades: {error}. Du kan försöka igen.");
                 }
             }
         }
@@ -107,16 +107,16 @@ impl Updater {
             return;
         }
         let mut open = true;
-        egui::Window::new("StrataFetch updates").open(&mut open).default_width(440.0).resizable(false).show(ctx, |ui| {
-            ui.label(format!("Installed: {}", env!("CARGO_PKG_VERSION")));
+        egui::Window::new(strata_app::i18n::tr("StrataFetch updates")).open(&mut open).default_width(440.0).resizable(false).show(ctx, |ui| {
+            ui.label(strata_app::localized_format!("Installed: {}", "Installerad version: {}", env!("CARGO_PKG_VERSION")));
             ui.label(&self.message);
             if self.busy { ui.spinner(); }
-            ui.checkbox(automatic, "Automatically check for updates");
-            ui.small("Checks GitHub on startup and every 24 hours while open. Downloads and restarts require your click.");
-            if ui.add_enabled(!self.busy, egui::Button::new("Check for updates")).clicked() { self.check(true); }
+            ui.checkbox(automatic, strata_app::i18n::tr("Automatically check for updates"));
+            ui.small(strata_app::i18n::tr("Checks GitHub on startup and every 24 hours while open. Downloads and restarts require your click."));
+            if ui.add_enabled(!self.busy, egui::Button::new(strata_app::i18n::tr("Check for updates"))).clicked() { self.check(true); }
             if let Some(release) = self.release.clone() {
                 if release.can_install() {
-                    if self.prepared.is_none() && ui.add_enabled(!self.busy, egui::Button::new("Download update")).clicked() {
+                    if self.prepared.is_none() && ui.add_enabled(!self.busy, egui::Button::new(strata_app::i18n::tr("Download update"))).clicked() {
                         self.busy = true;
                         self.message = "Downloading and verifying update…".into();
                         let sender = self.sender.clone();
@@ -127,17 +127,17 @@ impl Updater {
                         });
                     }
                 } else {
-                    ui.label("This platform or release requires installation from the Releases page.");
+                    ui.label(strata_app::i18n::tr("This platform or release requires installation from the Releases page."));
                 }
             }
-            if self.prepared.is_some() && ui.button("Restart and install").clicked() {
+            if self.prepared.is_some() && ui.button(strata_app::i18n::tr("Restart and install")).clicked() {
                 match self.prepared.take().unwrap().launch() {
                     Ok(()) => { self.exiting = true; ctx.send_viewport_cmd(egui::ViewportCommand::Close); },
-                    Err(error) => self.message = format!("Cannot install update: {error:#}"),
+                    Err(error) => self.message = strata_app::localized_format!("Cannot install update: {error:#}", "Det gick inte att installera uppdateringen: {error:#}"),
                 }
             }
-            ui.hyperlink_to("Release notes and downloads", updates::RELEASES);
-            ui.small("Windows updates install the full package, including the desktop, command line, browser host and bundled extensions. History and settings are preserved.");
+            ui.hyperlink_to(strata_app::i18n::tr("Release notes and downloads"), updates::RELEASES);
+            ui.small(strata_app::i18n::tr("Windows updates install the full package, including the desktop, command line, browser host and bundled extensions. History and settings are preserved."));
         });
         self.open = open;
     }

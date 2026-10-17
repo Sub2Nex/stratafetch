@@ -1,4 +1,18 @@
+## beta.11 interception repair
+
+Identified GET downloads now cancel before choice without network probe/size gates. webRequest + HTTP/HTTPS host permissions observe methods only in bounded memory; POST chains untouched. Real isolated Edge stream test passed (stopped during consent, decline restart, accept no browser restart, POST untouched). Native endpoint substituted only in that browser test. User Chrome still needs one Reload of installed unpacked folder; no claim of zero-byte interception. All complete unpacked payloads now sync together.
+
 # Codex continuation — 2026-10-16
+
+## Swedish and missing download controls — beta.11 / extension 0.2.6
+
+The user requested Swedish everywhere when selected, including extensions, and practical missing download-manager features. Added assets/locales/sv.json and shared i18n support for desktop labels, formatted messages, native dialogs and tray actions. The app's saved Svenska choice is atomically written to language.json for new native hosts; normal Windows profiles also save HKCU Software/StrataFetch Language for the two-language installer. Isolated test profiles never write that registry key. STRATAFETCH_LANGUAGE=en/sv selects a default for tests/new profiles; existing UI preferences remain authoritative.
+
+scripts/generate-locales.py generates locale.js and manifest-description locale resources for both browsers. Popup/context menu use browser language before a native ping; the app's language then overrides it. New popup capture filters persist captureMinBytes/captureExtensions; invalid filters fail closed, unknown lengths stay in the browser with a minimum, and automatic capture checks filters before pausing and before commit. No new permissions. Manifests are 0.2.6; native compatibility checks require a matching full beta.11 package.
+
+Manager.add_unique serializes unfinished manual/batch duplicate reservations and returns (job,reused). New AddPausedUnique is used only by GUI additions, preserves schedules/categories on reuse, and leaves normal native Add ownership/rollback unchanged. Completed data is never overwritten and explicit different destinations/names are separate. Concurrent and numbered-collision tests exercise it.
+
+Validation logs/screenshots live under .smoke/swedish-beta11. Both extension popup HTML/API variants rendered in Swedish with app-language override and saved filters verified. Actual native desktop settings/browser views rendered in isolated Swedish profiles; a separate native host read the saved choice without an environment override. Corrected an encoding mistake introduced during scripted edits; the full engine suites passed after repair. Keep all Python source reads/writes explicitly UTF-8. No CI/Actions or security changes. User installation/release still must be updated with the full matching setup, then local Chrome Reload once.
 
 ## Windows shell icon repair — beta.10 (2026-10-17)
 

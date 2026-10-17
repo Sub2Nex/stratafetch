@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.11 — 2026-10-17
+
+- Stop observed GET browser transfers during consent immediately, including unknown-size/query downloads; Keep in browser restarts normally, while POST requests stay untouched. Request-method observation replaces the slow pre-cancellation probe for new requests.
+- Sync complete unpacked extension payloads, including manifest permissions and language resources, to prevent live development copies from mixing versions.
+
+- Swedish across desktop settings, menus, transfer/scheduler/update dialogs, tray actions and download confirmations. The extension popup/context menu follows the app language, with browser-language fallback and localized manifest descriptions.
+- Swedish Windows setup, using the saved app language when available.
+- Extension 0.2.6 adds optional file-extension and minimum-size capture filters; filtered requests stay untouched in the browser and manual links remain available.
+- Manual/batch additions reuse unfinished downloads with the same URL, filename and folder, including automatically numbered collisions. Existing schedules, completed files and browser rollback ownership are preserved.
+
 ## 0.1.0-beta.10 — 2026-10-17
 
 - Ship a dedicated Windows shell icon and explicitly assign it to Start menu shortcuts and Installed apps, including paths containing spaces.
