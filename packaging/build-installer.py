@@ -30,6 +30,8 @@ def main():
                     *[str(package/name) for name in core]], check=True)
     if f'StrataFetch {version}' not in (package/'BUILD.txt').read_text(encoding='utf-8'):
         raise ValueError('Payload version differs from Cargo.toml')
+    if (package/'stratafetch.ico').read_bytes() != (root/'assets/stratafetch.ico').read_bytes():
+        raise ValueError('Payload must include the matching Windows shell icon')
     version_parts = [int(part) for part in version.split('-', 1)[0].split('.')]
     revision = re.search(r'(\d+)$', version.split('-', 1)[1]) if '-' in version else None
     version_parts.append(int(revision[1]) if revision else 0)

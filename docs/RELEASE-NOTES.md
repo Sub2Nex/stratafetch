@@ -1,4 +1,10 @@
-# StrataFetch v0.1.0-beta.9 — Confirmation lifecycle and complete release update
+# StrataFetch v0.1.0-beta.10 — Windows Start menu and Installed apps icons
+
+The Windows setup now installs a dedicated stratafetch.ico, explicitly assigns it to app/uninstall Start menu shortcuts, and writes a quoted icon location with index 0 for Installed apps. Setup refreshes shell icon registrations on upgrade. Installer builds reject payloads without the matching icon. Local development deployment uses the full setup so shell metadata is updated along with the executables.
+
+Browser extension 0.2.5 is unchanged; no new store ZIP upload is needed when that version is already uploaded. Windows executables remain unsigned. This is a Windows packaging fix; download behavior is unchanged from beta.9.
+
+## Previous beta.9 changes
 
 Windows browser confirmations now close when their companion connection disappears or the app exits. This releases blocking dialog threads during shutdown instead of leaving Exit or an update waiting for a click in an abandoned prompt. A connection lost after submission no longer opens a second fallback confirmation. Resident confirmation replies omit download history, so a large history does not delay the consent response.
 

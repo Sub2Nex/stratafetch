@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-beta.10 — 2026-10-17
+
+- Ship a dedicated Windows shell icon and explicitly assign it to Start menu shortcuts and Installed apps, including paths containing spaces.
+- Refresh shell icon registrations during installation/upgrades and reject installer payloads missing the matching icon.
+- Local deployment now uses the full setup so shortcuts, uninstall metadata and executables cannot drift apart.
+
 ## 0.1.0-beta.9 — 2026-10-17
 
 - Cancel resident Windows confirmation dialogs on companion disconnect or app shutdown, releasing blocking threads for Exit and updates.

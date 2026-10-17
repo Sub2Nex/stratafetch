@@ -27,6 +27,8 @@ foreach ($documentName in @('README.md','LICENSE-MIT','LICENSE-APACHE','THIRD-PA
 Copy-Item -LiteralPath (Join-Path $workspacePath 'extensions') -Destination $packagePath -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $workspacePath 'docs') -Destination $packagePath -Recurse -Force
 Copy-Item -LiteralPath $PSScriptRoot -Destination $packagePath -Recurse -Force
+# Shell registrations use a dedicated icon instead of an implicitly cached EXE.
+Copy-Item -LiteralPath (Join-Path $workspacePath 'assets/stratafetch.ico') -Destination $packagePath
 $archivePath = Join-Path $outputPath 'stratafetch-windows-x64.zip'
 Compress-Archive -LiteralPath $packagePath -DestinationPath $archivePath -Force
 # Offer the desktop directly as well as the full CLI/browser integration bundle.

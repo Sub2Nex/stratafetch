@@ -1,5 +1,13 @@
 # Codex continuation — 2026-10-16
 
+## Windows shell icon repair — beta.10 (2026-10-17)
+
+The user reports missing icons in Start menu/Installed apps after the GitHub download. Targeted inspection found the installed uninstall entry still said beta.3, with an EXE DisplayIcon, and both shortcuts had implicit `,0` icons. Previous local EXE deployment updated beta.9 binaries but left shell registration and uninstaller stale. beta.9 was successfully published as Latest with all eleven asset hashes verified; do not overwrite that tagged release.
+
+beta.10 packages a dedicated stratafetch.ico. NSIS assigns explicit icon locations to both shortcuts, uses a quoted icon path with index 0 in DisplayIcon, and notifies Windows Shell after successful setup. The installer builder rejects a missing/mismatched product icon. The local deploy helper now requires the full matching setup and verified checksum, invokes normal setup, then checks installed file hashes and uninstall version/icon. This avoids another EXE-only deployment leaving stale Windows metadata. `scripts/verify-windows-shell.ps1` verifies real installed shortcuts/registry and native Windows Shell icon extraction. Use the normal full setup; no unsigned execution policy bypass is authorized.
+
+No browser extension code changed (0.2.5). No new browser transfer claim is made. Build/test/publish beta.10 locally without CI or Actions, preserving beta.6 draft and prior released assets.
+
 ## Release update — beta.9 / extension 0.2.5 (2026-10-17)
 
 The user requested a GitHub push and an app bug-fix update. Main already contained beta.8 at 75d6e3c, while GitHub Latest was still beta.5 and beta.6 remained a draft. Prepare a new beta.9 release with matching full Windows setup, update helper, Linux x64 package, extension archives and checksums; preserve the older draft assets.

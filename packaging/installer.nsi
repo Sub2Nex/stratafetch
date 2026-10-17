@@ -102,7 +102,7 @@ Section "StrataFetch desktop and command line" Core
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "StrataFetch"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
   WriteRegStr HKCU "${UNINSTALL_KEY}" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\stratafetch-desktop.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" '$\"$INSTDIR\stratafetch.ico$\",0'
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/Sub2Nex/stratafetch"
@@ -112,9 +112,13 @@ SectionEnd
 Section "Start Menu shortcuts" Shortcuts
   SetShellVarContext current
   CreateDirectory "$SMPROGRAMS\${START_MENU_DIR}"
-  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\StrataFetch.lnk" "$INSTDIR\stratafetch-desktop.exe"
-  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\StrataFetch.lnk" "$INSTDIR\stratafetch-desktop.exe" "" "$INSTDIR\stratafetch.ico" 0
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\Uninstall.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\stratafetch.ico" 0
 SectionEnd
+Function .onInstSuccess
+  ; Refresh Installed apps and shortcuts after all selected sections finish.
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+FunctionEnd
 Section "Local browser integration" Browsers
   !ifdef TEST_BUILD
     DetailPrint "Isolated installer test: browser registration is verified separately."
