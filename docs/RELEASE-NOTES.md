@@ -1,4 +1,14 @@
-# StrataFetch v0.1.0-beta.6 — Shared icon and complete Windows updates
+# StrataFetch v0.1.0-beta.7 — Browser handoff and Windows tray
+
+Matching extension version: 0.2.4. Native confirmation opens in parallel with browser pause acquisition; bounded pause reclamation handles competing resume events. A file that completes before consent can be adopted without copying, deleting or downloading its bytes again. Native transfer requires a final browser commit after consent and safety checks.
+
+Windows confirmations use a lightweight native dialog. A running tray process serves it directly over local IPC. Closing the main window keeps the app in the tray by default, configurable in General settings; the tray offers Open and Exit. Windows startup is not enabled automatically.
+
+Installed component hashes and resident confirmation/close behavior were verified on Windows. JavaScript, relevant native Rust, adoption, archive identity and Mozilla lint checks pass. Full Chrome accepted-transfer verification after Reload remains outstanding, and sub-100ms timing is not claimed. Chrome download events occur after a request begins, so pre-first-byte interception cannot be guaranteed. No browser security settings were disabled.
+
+Use the full Windows setup to update all components, then Reload the existing extension once. See BROWSER-CAPTURE-REPAIR.md for exact paths, build/deployment details, evidence and remaining protocol limitations. No CI or Actions was used; binaries remain unsigned.
+
+## Previous beta.6 changes
 
 Download the full Windows setup for this release. Users upgrading from beta.5 or older should run the setup once to replace older companion files; those older updaters only replace the desktop executable.
 
