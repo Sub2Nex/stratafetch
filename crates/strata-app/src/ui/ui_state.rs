@@ -158,6 +158,7 @@ pub enum Completion {
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
+    pub close_to_tray: bool,
     pub automatic_updates: bool,
     pub folder: String,
 
@@ -180,6 +181,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             automatic_updates: true,
+            close_to_tray: true,
             folder: strata_app::download_dir().to_string_lossy().into(),
 
             dark: true,

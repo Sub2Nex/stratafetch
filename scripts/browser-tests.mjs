@@ -25,9 +25,11 @@ function background(folder, options={}) {
     downloads:{
       onCreated:{addListener(fn){hooks.created=fn;}},
       onChanged:{addListener(fn){hooks.changed=fn;}},
-      async pause(id){calls.push({op:'pause',id});if(options.pauseError)throw Error('pause failed');items.get(id).paused=true;},
+      onDeterminingFilename:{addListener(fn){hooks.filename=fn;}},
+      async pause(id){calls.push({op:'pause',id});if(options.pauseWait)await options.pauseWait;if(options.pauseError)throw Error('pause failed');items.get(id).paused=true;},
       async search({id}){calls.push({op:'search',id});const count=(searches.get(id)||0)+1;searches.set(id,count);const changes=typeof options.searchItem==='function'?options.searchItem(id,count):options.searchItem;return items.has(id)?[{...items.get(id),...changes}]:[];},
       async resume(id){calls.push({op:'resume',id});if(options.resumeError)throw Error('resume failed');items.get(id).paused=false;},
+      async erase({id}){calls.push({op:'erase',id});items.delete(id);return [id];},
       async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');if(!options.cancelNoEffect)items.get(id).state='interrupted';},
     },
     action:Object.fromEntries(['setBadgeText','setBadgeBackgroundColor','setTitle'].map(name=>[name,async value=>{calls.push({op:name,...value});if(options.badgeError)throw Error('badge failed');}])),
@@ -36,27 +38,84 @@ function background(folder, options={}) {
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
-  test(folder+': waits for target metadata then handles concurrent changes once',async()=>{
-    const b=background(folder,{item:{filename:'',mime:''}});
-    await b.hooks.created(b.item);
-    assert.equal(b.calls.some(c=>c.op==='pause'),false);
-    assert(b.stored.capture_candidate_7);
-    b.item.filename='file.zip';
-    await Promise.all([b.hooks.changed({id:7}),b.hooks.changed({id:7})]);
-    await b.hooks.changed({id:7});
-    assert.equal(b.calls.filter(c=>c.payload?.action==='capture').length,1);
-    assert.equal(b.calls.find(c=>c.payload?.action==='capture').payload.mime,undefined);
-    assert.equal('capture_candidate_7' in b.stored,false);
+  test(folder+': confirmation is sent while pause API remains unresolved',async()=>{
+    let release;const pauseWait=new Promise(r=>{release=r;});
+    const b=background(folder,{pauseWait});let receive,disconnect;const sent=[];
+    b.api.runtime.connectNative=()=>({onMessage:{addListener(f){receive=f;}},onDisconnect:{addListener(f){disconnect=f;}},postMessage(p){sent.push(p);},disconnect(){disconnect();}});
+    const capture=b.hooks.created(b.item);
+    while(!sent.length)await new Promise(r=>setImmediate(r));
+    assert.equal(sent[0].action,'capture');
+    assert.equal(Boolean(b.item.paused),false);
+    release();receive({ok:false,declined:true});await capture;
+    assert.equal(b.calls.some(c=>c.op==='cancel'),false);
   });
-  test(folder+': persisted metadata candidate survives worker restart without raw URLs',async()=>{
-    const first=background(folder,{item:{filename:''}});
-    await first.hooks.created(first.item);
-    const record=first.stored.capture_candidate_7;
-    assert.equal(record.urlHash,createHash('sha256').update(first.item.url).digest('hex'));
-    assert.equal(JSON.stringify(record).includes('example.org'),false);
-    const next=background(folder,{stored:{capture_candidate_7:record}});
-    await next.hooks.changed({id:7});
-    assert.equal(next.calls.filter(c=>c.payload?.action==='capture').length,1);
+  for(const accept of [false,true]) {
+    test(folder+': fast completed file remains available during confirmation, accept='+accept,async()=>{
+      const b=background(folder);let receive,disconnect;const sent=[];
+      b.api.runtime.connectNative=()=>({onMessage:{addListener(f){receive=f;}},onDisconnect:{addListener(f){disconnect=f;}},postMessage(p){sent.push(p);},disconnect(){disconnect();}});
+      const capture=b.hooks.created(b.item);
+      while(!sent.length)await new Promise(r=>setImmediate(r));
+      Object.assign(b.item,{state:'complete',paused:false,fileSize:100});
+      await b.hooks.changed({id:7,state:{current:'complete'},paused:{current:false}});
+      assert.equal(b.calls.some(c=>c.op==='erase'||c.op==='cancel'),false);
+      if(accept){
+        receive({ok:true,confirmation:'accepted'});
+        while(!sent.some(p=>p.action==='adoptCapture'))await new Promise(r=>setImmediate(r));
+        const adopt=sent.find(p=>p.action==='adoptCapture');
+        assert.equal(adopt.path,b.item.filename);assert.equal(adopt.size,100);
+        receive({ok:true,adopted:true,download:{id:'adopted-id'}});
+      }else receive({ok:false,declined:true});
+      await capture;
+      assert.equal(b.calls.filter(c=>c.op==='erase').length,accept?1:0);
+      assert.equal(b.calls.some(c=>c.op==='cancel'||c.op==='resume'),false);
+    });
+  }
+  for(const unsafe of [false,true]) {
+    test(folder+': final native commit rechecks safety and holds an externally resumed download '+unsafe,async()=>{
+      const b=background(folder);let receive,disconnect;const sent=[];
+      b.api.runtime.connectNative=()=>({
+        onMessage:{addListener(fn){receive=fn;}},onDisconnect:{addListener(fn){disconnect=fn;}},
+        postMessage(payload){sent.push(payload);},disconnect(){disconnect();}
+      });
+      const handoff=b.hooks.created(b.item);
+      while(!sent.length)await new Promise(r=>setImmediate(r));
+      assert.equal(b.item.paused,true);
+      b.item.paused=false;
+      if(unsafe)b.item.danger='dangerous';
+      await b.hooks.changed({id:7,paused:{current:false}});
+      receive({ok:true,confirmation:'accepted'});
+      if(unsafe) {
+        await handoff;
+        assert.equal(sent.some(p=>p.action==='commitCapture'),false);
+        assert.equal(b.calls.some(c=>c.op==='cancel'),false);
+      } else {
+        while(!sent.some(p=>p.action==='commitCapture'))await new Promise(r=>setImmediate(r));
+        assert.equal(b.item.paused,true);
+        assert.equal(sent.filter(p=>p.action==='capture').length,1);
+        receive({ok:true,download:{id:'native-id'}});
+        await handoff;
+        assert.equal(b.item.state,'interrupted');
+        assert.equal(b.calls.some(c=>c.op==='resume'),false);
+      }
+    });
+  }
+  test(folder+': onCreated and filename events open one prompt without waiting for metadata',async()=>{
+    const b=background(folder,{item:{filename:'',mime:''}});
+    const capture=b.hooks.created(b.item);
+    let suggested=false;
+    b.hooks.filename({...b.item,filename:'file.zip'},()=>{suggested=true;});
+    await capture;
+    assert(suggested);
+    assert.equal(b.calls.filter(c=>c.payload?.action==='capture').length,1);
+    assert.equal(b.calls.some(c=>c.op==='pause'),true);
+    assert.equal(b.calls.find(c=>c.payload?.action==='capture').payload.mime,undefined);
+  });
+  test(folder+': legacy metadata-wait records are cleaned without recapturing old downloads',async()=>{
+    const b=background(folder,{stored:{capture_candidate_7:{observedAt:Date.now(),urlHash:'old'}}});
+    await b.hooks.startup();
+    await b.hooks.changed({id:7});
+    assert.equal(b.calls.some(c=>c.op==='native'),false);
+    assert.equal('capture_candidate_7' in b.stored,false);
   });
   test(folder+': decline is not recaptured by resume notifications',async()=>{
     const b=background(folder,{native:async()=>({ok:false,declined:true})});
@@ -66,19 +125,6 @@ for(const folder of ['chromium','firefox']) {
     assert.equal(b.calls.filter(c=>c.payload?.action==='capture').length,1);
     assert.equal(b.item.paused,false);
   });
-  for(const kind of ['expired','private','url-substitution','unsafe']) {
-    test(folder+': pending metadata rejects '+kind,async()=>{
-      const b=background(folder,{item:{filename:''}});
-      await b.hooks.created(b.item);
-      if(kind==='expired')b.stored.capture_candidate_7.observedAt=0;
-      if(kind==='private')b.item.incognito=true;
-      if(kind==='url-substitution')b.item.url='https://other.example.org/file.zip';
-      if(kind==='unsafe')b.item.danger='dangerous';
-      b.item.filename='file.zip';
-      await b.hooks.changed({id:7});
-      assert.equal(b.calls.some(c=>c.op==='pause'||c.op==='native'),false);
-    });
-  }
   test(folder+': unconfirmed native rollback preserves pause and recovery record',async()=>{
     let rollbackFails=true;
     const b=background(folder,{cancelError:true,native:async p=>p.action==='capture'?{ok:true,download:{id:'native-id'}}:{ok:!rollbackFails}});
@@ -128,21 +174,23 @@ for(const folder of ['chromium','firefox']) {
     await b.hooks.created(b.item);
     const native=b.calls.findIndex(c=>c.op==='native');
     assert(native>=0);
-    assert(b.calls.slice(0,native).filter(c=>c.op==='search').length>=4);
-    assert.equal(b.calls.filter(c=>c.op==='pause').length,1);
+    assert(b.calls.slice(0,native).filter(c=>c.op==='search').length<4); // Prompt is independent of pause settling.
+    assert(b.calls.filter(c=>c.op==='pause').length>=1);
     assert.equal(b.calls.some(c=>c.op==='cancel'),true);
   });
   test(folder+': an unconfirmed pause times out without taking the download',async()=>{
     const b=background(folder,{searchItem:{paused:false}});
     await b.hooks.created(b.item);
-    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
+    assert.equal(b.calls.some(c=>c.payload?.action==='capture'),true);
+    assert.equal(b.calls.some(c=>c.op==='cancel'),false);
     assert.match(b.stored.lastHandoffError.message,/did not confirm its pause/);
   });
-  test(folder+': manual resume after confirmed pause prevents native handoff',async()=>{
+  test(folder+': a pause that cannot be held prevents native handoff',async()=>{
     const b=background(folder,{searchItem:(_id,count)=>count>=3?{paused:false}:{}});
     await b.hooks.created(b.item);
-    assert.equal(b.calls.some(c=>c.op==='native'||c.op==='cancel'),false);
-    assert.equal(b.calls.filter(c=>c.op==='pause').length,1);
+    assert.equal(b.calls.some(c=>c.payload?.action==='capture'),true);
+    assert.equal(b.calls.some(c=>c.op==='cancel'),false);
+    assert(b.calls.filter(c=>c.op==='pause').length>=1);
   });
   test(folder+': safety changes during pause settling never reach the host',async()=>{
     const b=background(folder,{searchItem:(_id,count)=>count===1?{paused:false}:{danger:'dangerous'}});
@@ -237,7 +285,8 @@ for(const folder of ['chromium','firefox']) {
       });
       await b.hooks.created(b.item);
       if(failure==='badge')assert.equal(b.calls.some(c=>c.op==='cancel'),true);
-      else if(failure==='pause'||failure==='changed')assert.equal(b.calls.some(c=>c.op==='native'),false);
+      else if(failure==='pause')assert.equal(b.calls.some(c=>c.op==='cancel'),false);
+      else if(failure==='changed')assert.equal(b.calls.some(c=>c.op==='native'),false);
       else {
         assert.equal(b.calls.some(c=>c.op==='resume'),true);
         if(failure==='cancel')assert.equal(b.calls.some(c=>c.payload?.action==='cancel'),true);
@@ -339,6 +388,7 @@ for (const folder of ['chromium','firefox']) {
     let finish;const b=background(folder,{items:[next],native:()=>new Promise(resolve=>{finish=resolve;})});
     const first=b.hooks.created(b.item),second=b.hooks.created(next);
     while(!finish)await new Promise(resolve=>setImmediate(resolve));
+    while(!next.paused)await new Promise(resolve=>setImmediate(resolve));
     await b.api.storage.local.set({excludedDomains:['second.example.org']});
     finish({ok:false,declined:true});await Promise.all([first,second]);
     assert.equal(b.calls.filter(call=>call.op==='native').length,1);
@@ -363,6 +413,7 @@ for (const folder of ['chromium','firefox']) {
     const b=background(folder,{items:[next],native:()=>new Promise(resolve=>finishes.push(resolve))});
     const first=b.hooks.created(b.item), second=b.hooks.created(next);
     while(!finishes.length)await new Promise(resolve=>setImmediate(resolve));
+    while(!next.paused)await new Promise(resolve=>setImmediate(resolve));
     assert.equal(b.calls.filter(call=>call.op==='pause').length,2);
     assert.equal(finishes.length,1);
     finishes[0]({ok:false,declined:true});

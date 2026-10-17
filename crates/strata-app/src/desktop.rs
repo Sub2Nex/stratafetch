@@ -55,6 +55,7 @@ fn main() -> eframe::Result {
         persist_window: !smoke,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("org.stratafetch.StrataFetch")
+            .with_visible(!std::env::args().any(|arg| arg == "--background"))
             .with_icon(std::sync::Arc::new(strata_app::branding::icon()))
             .with_inner_size([width, height])
             .with_clamp_size_to_monitor_size(!smoke)

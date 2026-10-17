@@ -22,6 +22,7 @@ mod ui_state;
 
 #[cfg(test)]
 mod tests;
+mod tray;
 mod updates;
 mod worker;
 
@@ -70,6 +71,8 @@ impl Session {
 }
 
 pub struct App {
+    tray: Option<tray::Tray>,
+    exiting: bool,
     updater: updates::Updater,
     state: State,
 
@@ -132,8 +135,18 @@ impl App {
         }
 
         let (open_sender, open_messages) = mpsc::channel();
-
+        let tray = if std::env::var_os("STRATAFETCH_SMOKE_OUTPUT").is_none() {
+            tray::Tray::new(cc.egui_ctx.clone())
+        } else {
+            None
+        };
+        if tray.is_none() && std::env::args().any(|arg| arg == "--background") {
+            cc.egui_ctx
+                .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        }
         Self {
+            tray,
+            exiting: false,
             updater: updates::Updater::new(),
             state,
 
@@ -619,6 +632,32 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        while let Some(event) = self.tray.as_ref().and_then(|tray| tray.event()) {
+            match event {
+                tray::Event::Open => {
+                    root.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    root.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                    root.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                tray::Event::Exit => {
+                    self.exiting = true;
+                    root.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
+        if self.tray.is_some()
+            && self.state.prefs.close_to_tray
+            && !self.exiting
+            && !self.updater.exiting
+            && root.ctx().input(|input| input.viewport().close_requested())
+        {
+            root.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            root.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
         self.update(root.ctx());
 
         let ctx = root.ctx().clone();

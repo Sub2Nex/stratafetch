@@ -53,6 +53,8 @@ match state.settings_page {
                 0=>{
 ui.strong("General");
 ui.checkbox(&mut state.prefs.automatic_updates, "Automatically check for updates");
+#[cfg(windows)]
+ui.checkbox(&mut state.prefs.close_to_tray, "Keep StrataFetch running in the system tray when the window closes");
 ui.small("Tools → Check for updates downloads and installs Windows desktop updates.");
 ui.label("Default destination directory");
 ui.add(egui::TextEdit::singleline(&mut state.prefs.folder).desired_width(f32::INFINITY));

@@ -1,5 +1,6 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const pending = new Set();
+const pauseLeases = new Map();
 let recovery;
 let captureQueue = Promise.resolve();
 let eventWrites = Promise.resolve();
@@ -36,19 +37,27 @@ function safeIssue(error) {
 function nativeMessage(payload) {
   return payload.action === "capture" ? queuedCapture(() => payload) : nativeRequest(payload);
 }
-function queuedCapture(makePayload) {
+function queuedCapture(makePayload, beforeCommit) {
   // Pause downloads immediately, but ask about one file at a time. Re-read
   // queued downloads when their turn arrives, after any browser/user changes.
-  const result = captureQueue.then(makePayload).then(nativeRequest);
+  const result = captureQueue.then(makePayload).then(payload => nativeRequest(payload, beforeCommit));
   captureQueue = result.catch(() => {});
   return result;
 }
-function nativeRequest(payload) {
+function nativeRequest(payload, beforeCommit) {
   if (!api.runtime.connectNative) return api.runtime.sendNativeMessage("org.stratafetch.host", payload);
   return new Promise((resolve, reject) => {
     const port = api.runtime.connectNative("org.stratafetch.host");
     let answered = false;
-    port.onMessage.addListener(reply => { answered = true; resolve(reply); port.disconnect(); });
+    port.onMessage.addListener(reply => {
+      if (reply?.ok && reply.confirmation === "accepted") {
+        Promise.resolve().then(() => beforeCommit?.()).then(commit => {
+          if (!answered) port.postMessage(commit || {action: "commitCapture"});
+        }).catch(error => { if (!answered) { answered = true; reject(error); port.disconnect(); } });
+        return;
+      }
+      answered = true; resolve(reply); port.disconnect();
+    });
     port.onDisconnect.addListener(() => {
       const error = api.runtime.lastError;
       if (!answered) reject(new Error(error?.message || "Native host disconnected"));
@@ -90,24 +99,53 @@ function sameDownload(current, original) {
 }
 function handoffIssue(current, original, requirePaused = true) {
   if (!sameDownload(current, original)) return "Download identity changed";
-  if (!eligible(current, true)) {
+  if (!eligible(current?.state === "complete" ? {...current, state: "in_progress"} : current, true)) {
     // Only enum/boolean diagnostics: never record download URLs or filenames.
     if (current.state !== "in_progress") return "Download is " + current.state;
     if (current.danger && current.danger !== "safe") return "Browser safety status is " + current.danger;
     return "Download became private, extension-managed, or an unsupported file type";
   }
-  return requirePaused && !current.paused ? "Browser download is no longer paused" : "";
+  return ""; // Pause ownership is enforced at commit, never gates the dialog.
 }
 async function waitForOwnedPause(original) {
   for (let attempt = 0; attempt < 10; attempt++) {
     const [current] = await api.downloads.search({id: original.id});
     const issue = handoffIssue(current, original, false);
     if (issue) throw new Error(issue);
-    if (current.paused) return current;
+    if (current.paused || current.state === "complete") return current;
     if (attempt === 0 || attempt === 9) recordEvent("pause_not_observed", current);
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   throw new Error("The browser did not confirm its pause in time");
+}
+function ownPause(original) {
+  let active = true, error, changes = 0, work = Promise.resolve();
+  const ensure = () => {
+    const next = work.then(async () => {
+      if (!active) throw new Error("Browser handoff ended");
+      const [current] = await api.downloads.search({id: original.id});
+      const issue = handoffIssue(current, original, false);
+      if (issue) throw new Error(issue);
+      if (current.paused || current.state === "complete") return current;
+      if (error) throw error;
+      // Other download handlers (including security inspection) can resume
+      // after our pause. Keep our own hold without accepting unsafe downloads
+      // or interfering with a browser cancellation. The confirmation's Keep
+      // in browser button releases this lease before resuming.
+      if (++changes > 12) throw new Error("Another download handler repeatedly released the pause");
+      recordEvent("pause_reacquired", current);
+      try { await api.downloads.pause(original.id); }
+      catch (failure) {
+        const [latest] = await api.downloads.search({id: original.id});
+        if (!handoffIssue(latest, original, false) && latest.state === "complete") return latest;
+        throw failure;
+      }
+      return await waitForOwnedPause(original);
+    });
+    work = next.catch(failure => { error = failure; });
+    return next;
+  };
+  return {ensure, release: async () => { active = false; await work; }};
 }
 function excluded(url, rules) {
   try {
@@ -124,97 +162,61 @@ api.runtime.onMessage.addListener((message, _sender, respond) => {
   nativeMessage(payload).then(reply, error => reply({ok: false, error: "Browser bridge: " + safeIssue(error)}));
   return true;
 });
-// onCreated may precede target-name and MIME determination. Observe only
-// downloads born while this extension is active, then capture once metadata is ready.
-const candidates = new Map();
-const inspecting = new Set();
-const inspectAgain = new Set();
+// Event handlers claim a newly observed ID immediately. Opening the native
+// dialog and acquiring the browser pause proceed independently.
 const attempted = new Set();
-const CANDIDATE_AGE = 5 * 60 * 1000;
-async function urlFingerprint(url) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-}
-function candidateKey(id) { return "capture_candidate_" + id; }
-async function forgetCandidate(id) {
-  candidates.delete(id);
-  await api.storage.local.remove(candidateKey(id));
-}
 async function watchDownload(item) {
   if (!eligible(item) || pending.has(item.id) || attempted.has(item.id)) return;
-  const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-  if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains) || candidates.has(item.id)) return;
+  attempted.add(item.id);
+  if (attempted.size > 2048) attempted.delete(attempted.values().next().value);
   recordEvent("observed", item);
-  const record = {observedAt: Date.now(), startTime: item.startTime, urlHash: await urlFingerprint(item.url)};
-  if (candidates.has(item.id) || pending.has(item.id) || attempted.has(item.id)) return;
-  candidates.set(item.id, record);
-  await api.storage.local.set({[candidateKey(item.id)]: record});
-  return inspectDownload(item.id);
-}
-async function inspectDownload(id) {
-  if (pending.has(id) || attempted.has(id)) return;
-  if (inspecting.has(id)) { inspectAgain.add(id); return; }
-  inspecting.add(id);
-  try {
-    const record = candidates.get(id) || (await api.storage.local.get({[candidateKey(id)]: null}))[candidateKey(id)];
-    if (!record) return;
-    if (!Number.isFinite(record.observedAt) || Date.now() - record.observedAt > CANDIDATE_AGE) { await forgetCandidate(id); return; }
-    const [current] = await api.downloads.search({id});
-    if (!current || current.state !== "in_progress" || current.incognito || current.byExtensionId || current.paused) { await forgetCandidate(id); return; }
-    if (await urlFingerprint(current.url) !== record.urlHash || !sameDownload(current, {id, url: current.url, startTime: record.startTime})) {
-      await forgetCandidate(id);
-      await showResult(false, "Download identity changed before metadata became ready. Keeping it in the browser.");
-      return;
-    }
-    const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-    if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) { await forgetCandidate(id); return; }
-    // An empty target name is a normal early Chrome snapshot, not a rejection.
-    if (!current.filename) return;
-    if (!eligible(current)) { await forgetCandidate(id); return; }
-    recordEvent("metadata_ready", current);
-    attempted.add(id);
-    if (attempted.size > 2048) attempted.delete(attempted.values().next().value);
-    await forgetCandidate(id);
-    return await intercept(current);
-  } catch (error) {
-    await showResult(false, "Observing browser download: " + safeIssue(error));
-  } finally {
-    inspecting.delete(id);
-    if (inspectAgain.delete(id)) await inspectDownload(id);
-  }
+  return intercept(item);
 }
 api.downloads.onCreated.addListener(item => watchDownload(item));
+// Chrome exposes the tentative filename before its later filename onChanged
+// notification. Start the pause here instead of waiting for target-path updates.
+// Do not delay Chrome's filename callback: this is not a network-blocking API.
+if (api.downloads.onDeterminingFilename) {
+  api.downloads.onDeterminingFilename.addListener((item, suggest) => {
+    suggest();
+    if (!eligible(item) || pending.has(item.id) || attempted.has(item.id)) return;
+    watchDownload(item).catch(() => {});
+  });
+}
 api.downloads.onChanged.addListener(delta => {
   if (pending.has(delta.id) && delta.paused) {
     recordEvent("browser_pause_changed", {id: delta.id, paused: delta.paused.current});
   }
-  return inspectDownload(delta.id);
+  if (delta.paused?.current === false) pauseLeases.get(delta.id)?.ensure().catch(() => {});
+
 });
 
 async function intercept(item) {
+  // Startup recovery must finish before a new handoff can claim a browser ID.
+  // Otherwise recovery's async search can resume a download we just paused.
+  await (recovery || startupRecovery);
   if (!eligible(item) || pending.has(item.id)) return;
   pending.add(item.id);
   let paused = false;
   let accepted;
   let ownedStartTime = String(item.startTime || "");
   let phase = "Reading capture settings";
+  let lease;
   try {
     const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
     if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: String(item.startTime || ""), timestamp: Date.now()}});
-    phase = "Pausing browser download";
+    phase = "Opening browser bridge";
     recordEvent("pause_requested", item);
-    await api.downloads.pause(item.id);
     paused = true;
-    phase = "Checking browser download";
-    const pausedItem = await waitForOwnedPause(item);
-    ownedStartTime = String(pausedItem.startTime || "");
-    recordEvent("browser_paused", pausedItem);
-    await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
+    lease = ownPause(item);
+    pauseLeases.set(item.id, lease);
+    // Do not serialize the prompt behind pause negotiation or metadata events.
+    lease.ensure().then(current => recordEvent(current.state === "complete" ? "browser_completed" : "browser_paused", current)).catch(() => {});
     const reply = await queuedCapture(async () => {
-      const [current] = await api.downloads.search({ id: item.id });
+      const [current] = await api.downloads.search({id: item.id});
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-      const issue = handoffIssue(current, item);
+      const issue = handoffIssue(current, item, false);
       if (issue) throw new Error(issue);
       ownedStartTime = String(current.startTime || "");
       await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
@@ -227,6 +229,23 @@ async function intercept(item) {
       phase = "Opening browser bridge";
       recordEvent("confirmation_requested", current);
       return payload;
+    }, async () => {
+      phase = "Checking browser before starting StrataFetch";
+      const current = await lease.ensure();
+      const settings = await api.storage.local.get({capture: true, excludedDomains: []});
+      if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
+      recordEvent("native_commit_authorized", current);
+      if (current.state === "complete") {
+        if (!current.filename || current.exists === false || !Number.isSafeInteger(current.fileSize) || current.fileSize < 0) throw new Error("Completed browser file cannot be verified");
+        return {action: "adoptCapture", path: current.filename, size: current.fileSize};
+      }
+      if (!current.paused) throw new Error("The browser pause could not be held after consent");
+      const commit = {action: "commitCapture", url: current.finalUrl || current.url};
+      const name = (current.filename || item.filename || "").split(/[\\/]/).pop();
+      if (name) commit.name = name;
+      if (current.mime) commit.mime = current.mime;
+      if (Number.isSafeInteger(current.totalBytes) && current.totalBytes > 0) commit.size = current.totalBytes;
+      return commit;
     });
     if (!reply?.ok) {
       recordEvent(reply?.declined ? "declined" : "native_rejected", item);
@@ -237,7 +256,17 @@ async function intercept(item) {
     if (typeof accepted !== "string" || !accepted) { accepted = undefined; throw new Error("Native host did not acknowledge the download"); }
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now(), nativeId: accepted}});
     recordEvent("native_acknowledged", {id: item.id}, accepted);
-    const [latest] = await api.downloads.search({ id: item.id });
+    if (reply.adopted === true) {
+      // The native manager now references this exact completed file. Erase only
+      // browser history; never delete/re-download the adopted bytes.
+      accepted = undefined;
+      paused = false;
+      await api.downloads.erase({id: item.id});
+      recordEvent("browser_completed_file_adopted", {id: item.id});
+      await showResult(true, "Completed file moved to StrataFetch");
+      return;
+    }
+    const latest = await lease.ensure();
     const latestIssue = handoffIssue(latest, item);
     if (latestIssue) throw new Error(latestIssue);
     phase = "Cancelling browser copy after acknowledgment";
@@ -251,6 +280,8 @@ async function intercept(item) {
     recordEvent("handoff_failed", {id: item.id}, accepted);
     await showResult(false, phase + ": " + safeIssue(error) + ". Keeping the download in your browser.");
   } finally {
+    pauseLeases.delete(item.id);
+    if (lease) await lease.release();
     let recovered = true;
     if (accepted) {
       try {
@@ -298,7 +329,7 @@ async function performRecovery() {
   const stored = await api.storage.local.get(null);
   for (const [key, record] of Object.entries(stored)) {
     if (/^capture_candidate_\d+$/.test(key)) {
-      if (!Number.isFinite(record?.observedAt) || Date.now() - record.observedAt > CANDIDATE_AGE) await api.storage.local.remove(key);
+      await api.storage.local.remove(key); // Retired metadata-wait bookkeeping.
       continue;
     }
     if (!/^capture_pending_\d+$/.test(key)) continue;
@@ -307,11 +338,15 @@ async function performRecovery() {
     let recovered = false;
     try {
       const [item] = await api.downloads.search({id});
+      if (pending.has(id)) continue;
+      const latest = await api.storage.local.get({[key]: null});
+      if (pending.has(id) || JSON.stringify(latest[key]) !== JSON.stringify(record)) continue;
       if (item?.paused && item.state === "in_progress" && record?.startTime && String(item.startTime) === record.startTime) {
         if (typeof record.nativeId === "string") {
           try { if (!(await nativeMessage({action: "cancel", id: record.nativeId}))?.ok) throw new Error("Rollback rejected"); }
           catch { throw new Error("StrataFetch cancellation is unconfirmed"); }
         }
+        recordEvent("recovery_resume_requested", item, record.nativeId);
         await api.downloads.resume(id);
         await showResult(false, "An interrupted handoff was resumed in the browser.");
       }
@@ -321,4 +356,4 @@ async function performRecovery() {
   }
 }
 api.runtime.onStartup.addListener(() => recoverBrowserDownloads().catch(() => {}));
-recoverBrowserDownloads().catch(() => {});
+const startupRecovery = recoverBrowserDownloads().catch(() => {});

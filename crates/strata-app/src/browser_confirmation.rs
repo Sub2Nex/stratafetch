@@ -8,6 +8,12 @@ use std::sync::{
 };
 
 pub fn show(name: String, source: String, destination: String) -> Result<bool> {
+    // The Windows task dialog avoids creating a new graphics device and GPU
+    // pipeline for each browser prompt. Keep the framebuffer test path explicit.
+    #[cfg(windows)]
+    if std::env::var_os("STRATAFETCH_CONFIRM_CAPTURE").is_none() {
+        return windows_dialog(&name, &source, &destination);
+    }
     let accepted = Arc::new(AtomicBool::new(false));
     let result = accepted.clone();
     let options = eframe::NativeOptions {
@@ -42,6 +48,76 @@ pub fn show(name: String, source: String, destination: String) -> Result<bool> {
     )
     .map_err(|error| anyhow::anyhow!("Cannot display download confirmation: {error}"))?;
     Ok(result.load(Ordering::Relaxed))
+}
+
+#[cfg(windows)]
+pub(crate) fn windows_dialog(name: &str, source: &str, destination: &str) -> Result<bool> {
+    use windows_sys::Win32::{
+        Foundation::*,
+        UI::{Controls::*, WindowsAndMessaging::*},
+    };
+    fn wide(value: &str) -> Vec<u16> {
+        value.encode_utf16().chain(Some(0)).collect()
+    }
+    unsafe extern "system" fn visible(
+        hwnd: HWND,
+        event: u32,
+        _: WPARAM,
+        _: LPARAM,
+        _: isize,
+    ) -> i32 {
+        if event == TDN_CREATED as u32 {
+            // Browser native hosts can inherit SW_HIDE. Make this dedicated
+            // confirmation visible explicitly, including on its first show.
+            unsafe {
+                ShowWindow(hwnd, SW_SHOW);
+                SetForegroundWindow(hwnd);
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            }
+        }
+        0
+    }
+    let title = wide("Download with StrataFetch");
+    let heading = wide("Download this file?");
+    let content = wide(&format!(
+        "{name}\n\nFrom: {source}\nSave to: {destination}\n\nChoose StrataFetch or keep the file in your browser."
+    ));
+    let accept = wide("Download with StrataFetch");
+    let keep = wide("Keep in browser");
+    let buttons = [
+        TASKDIALOG_BUTTON {
+            nButtonID: 100,
+            pszButtonText: accept.as_ptr(),
+        },
+        TASKDIALOG_BUTTON {
+            nButtonID: 101,
+            pszButtonText: keep.as_ptr(),
+        },
+    ];
+    let mut config: TASKDIALOGCONFIG = unsafe { std::mem::zeroed() };
+    config.cbSize = std::mem::size_of::<TASKDIALOGCONFIG>() as u32;
+    config.pszWindowTitle = title.as_ptr();
+    config.pszMainInstruction = heading.as_ptr();
+    config.pszContent = content.as_ptr();
+    config.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT;
+    config.cButtons = buttons.len() as u32;
+    config.pButtons = buttons.as_ptr();
+    config.nDefaultButton = 101;
+    config.pfCallback = Some(visible);
+    let mut choice = 0;
+    let result = unsafe {
+        TaskDialogIndirect(
+            &config,
+            &mut choice,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    anyhow::ensure!(
+        result >= 0,
+        "Cannot display Windows download confirmation ({result:#x})"
+    );
+    Ok(choice == 100)
 }
 
 struct Confirmation {

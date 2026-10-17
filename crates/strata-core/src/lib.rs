@@ -315,6 +315,66 @@ impl Manager {
         self.update(job.clone())?;
         Ok(job)
     }
+    /// Adopt browser-completed bytes without copying, deleting or fetching.
+    pub fn adopt_completed(&self, raw: &str, path: &Path, expected_size: u64) -> Result<Job> {
+        let _controls = self.0.controls.lock().unwrap();
+        anyhow::ensure!(raw.len() <= MAX_URL_BYTES, "URL exceeds 16 KiB limit");
+        let identity = metadata::identity(raw)?;
+        let source = std::fs::symlink_metadata(path)?;
+        anyhow::ensure!(
+            source.is_file() && !source.file_type().is_symlink(),
+            "Completed download is not a regular file"
+        );
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            anyhow::ensure!(
+                source.file_attributes() & 0x400 == 0,
+                "Completed file is a reparse point"
+            );
+        }
+        anyhow::ensure!(source.len() == expected_size, "Completed file size changed");
+        let destination = path.canonicalize()?;
+        let jobs = self.0.jobs.lock().unwrap();
+        if let Some(existing) = jobs.values().find(|job| job.destination == destination) {
+            anyhow::ensure!(
+                existing.status == Status::Completed && existing.url == raw,
+                "File is already managed by another job"
+            );
+            return Ok(existing.clone());
+        }
+        let job = Job {
+            id: Uuid::new_v4().to_string(),
+            url: raw.to_owned(),
+            destination,
+            status: Status::Completed,
+            size: Some(expected_size),
+            downloaded: expected_size,
+            speed: 0.0,
+            connections: 0,
+            validator: None,
+            resumable: false,
+            segments: vec![],
+            error: None,
+            sha256: None,
+            created: now(),
+            sequence: jobs
+                .values()
+                .map(|j| j.sequence)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .context("Download sequence exhausted")?,
+            completed: Some(now()),
+            priority: 0,
+            bytes_per_second: 0,
+            category: category_for(&identity.filename).to_owned(),
+            scheduled_at: None,
+        };
+        drop(jobs);
+        self.update(job.clone())?;
+        Ok(job)
+    }
     /// Starts a cooperative transfer on the current Tokio runtime.
     pub fn start(&self, id: &str) -> Result<()> {
         let mut controls = self.0.controls.lock().unwrap();

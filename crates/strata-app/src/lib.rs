@@ -40,6 +40,16 @@ pub fn download_dir() -> PathBuf {
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Command {
     List,
+    ConfirmBrowser {
+        name: String,
+        source: String,
+        destination: String,
+    },
+    AdoptCompleted {
+        url: String,
+        path: PathBuf,
+        size: u64,
+    },
     AddPaused {
         url: String,
         directory: PathBuf,
@@ -132,6 +142,26 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
     let result: Result<()> = (|| {
         match command {
             Command::List => (),
+            Command::ConfirmBrowser {
+                name,
+                source,
+                destination,
+            } => {
+                #[cfg(windows)]
+                {
+                    if browser_confirmation::windows_dialog(&name, &source, &destination)? {
+                        accepted_id = Some("browser-confirmation-accepted".into());
+                    }
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = (name, source, destination);
+                    bail!("Resident browser confirmation is unavailable");
+                }
+            }
+            Command::AdoptCompleted { url, path, size } => {
+                accepted_id = Some(manager.adopt_completed(&url, &path, size)?.id);
+            }
             Command::AddPaused {
                 url,
                 directory,

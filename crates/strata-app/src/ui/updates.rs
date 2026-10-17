@@ -11,6 +11,7 @@ enum Event {
 }
 
 pub struct Updater {
+    pub exiting: bool,
     sender: mpsc::Sender<Event>,
     receiver: mpsc::Receiver<Event>,
     last_check: Option<Instant>,
@@ -25,6 +26,7 @@ impl Updater {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel();
         Self {
+            exiting: false,
             sender,
             receiver,
             last_check: None,
@@ -130,7 +132,7 @@ impl Updater {
             }
             if self.prepared.is_some() && ui.button("Restart and install").clicked() {
                 match self.prepared.take().unwrap().launch() {
-                    Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                    Ok(()) => { self.exiting = true; ctx.send_viewport_cmd(egui::ViewportCommand::Close); },
                     Err(error) => self.message = format!("Cannot install update: {error:#}"),
                 }
             }

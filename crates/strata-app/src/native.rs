@@ -12,6 +12,7 @@ pub struct Message {
     pub size: Option<u64>,
     pub mime: Option<String>,
     pub id: Option<String>,
+    pub path: Option<std::path::PathBuf>,
 }
 pub fn read_message(input: &mut impl Read) -> Result<Option<Message>> {
     let mut prefix = [0u8; 4];

@@ -242,9 +242,16 @@ async fn exchange(
     read_pages(&mut stream).await
 }
 pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
+    // A user decision has no command execution deadline. Ordinary IPC retains
+    // its short timeout; this request cannot start a transfer on its own.
+    let deadline = if matches!(&command, Command::ConfirmBrowser { .. }) {
+        24 * 60 * 60
+    } else {
+        15
+    };
     #[cfg(windows)]
     {
-        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        tokio::time::timeout(std::time::Duration::from_secs(deadline), async {
             let name = endpoint(directory)?;
             let stream = loop {
                 match tokio::net::windows::named_pipe::ClientOptions::new().open(&name) {
@@ -270,7 +277,7 @@ pub async fn call(directory: &Path, command: Command) -> Result<Reply> {
             "IPC service belongs to another user"
         );
         tokio::time::timeout(
-            std::time::Duration::from_secs(15),
+            std::time::Duration::from_secs(deadline),
             exchange(stream, command),
         )
         .await?

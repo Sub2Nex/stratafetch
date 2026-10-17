@@ -1,5 +1,15 @@
 # Codex continuation — 2026-10-16
 
+## Current deployed milestone — 2026-10-17 beta.7 / extension 0.2.4
+
+This supersedes earlier uninstalled/source-only browser fixes. See BROWSER-CAPTURE-REPAIR.md for the root cause, branch comparison, exact runtime paths, protocol, build/deployment commands and evidence. The referenced origin/fix/reclaim-browser-pause-20261017 branch was fetched and reviewed; its bounded reclaim idea was retained, but its serial pre-prompt pause and complete-file rejection were replaced.
+
+The actual installed app, native host and extension were replaced together with verified matching files, backed up under .smoke/runtime-backup/20261017-084331. Chrome's existing unpacked folder is C:/Users/under/AppData/Local/Programs/StrataFetch/extensions/chromium; ID unchanged. Host registry points to the installed stratafetch-browser-host.exe. Actual ping: beta.7, running=true. Native desktop PID 7328 (do not assume PID persists) was started --background; same process served an observed native TaskDialog while the main window was hidden. A controlled consent test deliberately closed the port before commit and created no job. Do not accept/cancel the user's Ubuntu/Roblox transfers as a test.
+
+167 JS tests, 23 Windows app library tests, 18 desktop tests, one native adoption regression, four packaging tests pass; Firefox lint is clean. Both source trees built successfully locally, and a normal beta.7 Windows setup was built at D:/stratafetch-main/dist/beta.7/stratafetch-windows-x64-setup.exe. Main source is .publish; root is synchronized. A single Chrome Reload remains required. The real Chrome transfer after Reload, <100ms timing, and tray menu click actions remain unverified. Existing window close/background service and resident confirmation were verified through actual UI/native host. No security settings changed, no CI/Actions.
+
+Next: (1) verify one live Chrome handoff after Reload, including a small file and decline; (2) implement request-ID reconciliation for lost native acknowledgment after commit; (3) finish trusted Windows setup/uninstaller signing. Keep older beta.6 draft assets immutable and do not promote the new release as fully browser-verified. No production Chrome/Edge store IDs exist yet.
+
 ## Current investigation — extension 0.2.3
 
 The user's latest live popup says: "Checking browser download: The browser did not confirm its pause in time. Keeping the download in your browser." This is before native confirmation. A successful native ping does not establish browser capture functionality. Chromium HEAD DownloadItemImpl::Pause sets paused_ synchronously in active/target-pending states; there is no evidence yet that merely increasing the timeout solves this case. Do not claim its actual cause or live fix is proven.

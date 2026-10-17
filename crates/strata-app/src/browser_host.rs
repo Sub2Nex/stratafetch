@@ -36,10 +36,38 @@ fn run() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let mut input = std::io::stdin().lock();
     let mut output = std::io::stdout().lock();
-    while let Some(message) = native::read_message(&mut input)? {
+    while let Some(mut message) = native::read_message(&mut input)? {
         let result: Result<_> = (|| {
             if message.action == "capture" {
-                return strata_app::browser_capture::capture(&runtime, &message);
+                if !strata_app::browser_capture::confirm(&runtime, &message)? {
+                    return Ok(serde_json::json!({"ok":false,"declined":true}));
+                }
+                // Consent does not start any network activity. Give the
+                // extension one final safety/pause check after the dialog,
+                // and require its commit on this same authenticated port.
+                native::write_message(
+                    &mut output,
+                    &serde_json::json!({"ok":true,"confirmation":"accepted"}),
+                )?;
+                let commit = native::read_message(&mut input)?
+                    .context("Browser handoff ended before commit")?;
+                ensure!(
+                    matches!(commit.action.as_str(), "commitCapture" | "adoptCapture"),
+                    "Expected browser handoff commit"
+                );
+                message.path = if commit.action == "adoptCapture" {
+                    Some(commit.path.context("Missing completed file path")?)
+                } else {
+                    None
+                };
+                if commit.url.is_some() { message.url = commit.url; }
+                if commit.name.is_some() { message.name = commit.name; }
+                if commit.mime.is_some() { message.mime = commit.mime; }
+                if commit.size.is_some() { message.size = commit.size; }
+                if message.path.is_some() {
+                    message.size = Some(commit.size.context("Missing completed file size")?);
+                }
+                return strata_app::browser_capture::capture_confirmed(&runtime, &message);
             }
             if message.action == "ping" {
                 let reply = runtime

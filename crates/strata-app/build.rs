@@ -9,9 +9,9 @@ fn main() {
     }
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
-        println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
         println!(
-            "cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}",
+            "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
             root.join("app.manifest").display()
         );
         let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -35,7 +35,7 @@ fn main() {
             .status()
             .expect("Windows SDK rc.exe is required");
         assert!(status.success(), "Windows icon compilation failed");
-        println!("cargo:rustc-link-arg-bins={}", resource.display());
+        println!("cargo:rustc-link-arg={}", resource.display());
     } else {
         let target = env::var("TARGET").unwrap();
         let compiler_var = format!("RC_{}", target.replace('-', "_"));
@@ -64,6 +64,6 @@ fn main() {
             status.success(),
             "Windows application manifest compilation failed"
         );
-        println!("cargo:rustc-link-arg-bins={}", resource.display());
+        println!("cargo:rustc-link-arg={}", resource.display());
     }
 }

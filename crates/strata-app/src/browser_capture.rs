@@ -143,6 +143,13 @@ async fn wait_for_data(directory: &Path, id: &str) -> Result<strata_core::Job> {
 }
 
 pub fn capture(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<Value> {
+    if !confirm(runtime, message)? {
+        return Ok(json!({"ok":false,"declined":true}));
+    }
+    capture_confirmed(runtime, message)
+}
+
+pub fn confirm(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<bool> {
     let url = message.url.as_deref().context("Missing download URL")?;
     let identity = strata_core::metadata::identity(url)?;
     let name = message
@@ -150,9 +157,58 @@ pub fn capture(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<V
         .as_deref()
         .map(strata_core::sanitize_filename)
         .unwrap_or(identity.filename);
-    if !browser_integration::confirm_download(&name, &identity.host, &download_dir())? {
-        return Ok(json!({"ok":false,"declined":true}));
+    #[cfg(windows)]
+    if std::env::var_os("STRATAFETCH_CONFIRM_CAPTURE").is_none() {
+        if let Ok(reply) = runtime.block_on(ipc::call(
+            &state_dir(),
+            Command::ConfirmBrowser {
+                name: name.clone(),
+                source: identity.host.clone(),
+                destination: download_dir().display().to_string(),
+            },
+        )) {
+            let reply = check_reply(reply)?;
+            return Ok(reply.accepted_id.as_deref() == Some("browser-confirmation-accepted"));
+        }
     }
+    #[cfg(not(windows))]
+    let _ = runtime;
+    browser_integration::confirm_download(&name, &identity.host, &download_dir())
+}
+
+/// Only the native host calls this after explicit consent and a commit on the
+/// same port. Closing the port before commit must never create a native job.
+pub fn capture_confirmed(runtime: &tokio::runtime::Runtime, message: &Message) -> Result<Value> {
+    let url = message.url.as_deref().context("Missing download URL")?;
+    if let Some(path) = &message.path {
+        let size = message.size.context("Missing completed file size")?;
+        return runtime.block_on(async {
+            browser_integration::launch_desktop(false)?;
+            wait_for_service(&state_dir()).await?;
+            let reply = check_reply(
+                ipc::call(
+                    &state_dir(),
+                    Command::AdoptCompleted {
+                        url: url.to_owned(),
+                        path: path.clone(),
+                        size,
+                    },
+                )
+                .await?,
+            )?;
+            let id = reply
+                .accepted_id
+                .context("Manager did not acknowledge completed file")?;
+            let _ = browser_integration::request_attention(&state_dir(), Some(id.clone()), false);
+            Ok(json!({"ok":true,"adopted":true,"download":{"id":id}}))
+        });
+    }
+    let identity = strata_core::metadata::identity(url)?;
+    let name = message
+        .name
+        .as_deref()
+        .map(strata_core::sanitize_filename)
+        .unwrap_or(identity.filename);
     runtime.block_on(transfer_confirmed(
         &state_dir(),
         &download_dir(),
