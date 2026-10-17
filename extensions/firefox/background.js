@@ -1,5 +1,6 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const pending = new Set();
+const pauseOwners = new Map();
 let recovery;
 let captureQueue = Promise.resolve();
 let eventWrites = Promise.resolve();
@@ -109,6 +110,59 @@ async function waitForOwnedPause(original) {
   }
   throw new Error("The browser did not confirm its pause in time");
 }
+// A competing extension can resume the same Chrome download while the user
+// is deciding. Retake the pause only for an eligible download we own, and
+// bound retries so two extensions cannot fight forever.
+const PAUSE_RECLAIM_LIMIT = 6;
+async function keepBrowserPaused(id) {
+  const owner = pauseOwners.get(id);
+  if (!owner || !owner.active) return;
+  if (owner.failure) throw new Error(owner.failure);
+  if (owner.inFlight) return owner.inFlight;
+  owner.inFlight = (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (!owner.active) return;
+      const [current] = await api.downloads.search({id});
+      if (!owner.active) return;
+      const issue = handoffIssue(current, owner.original, false);
+      if (issue) throw new Error(issue);
+      if (current.paused) return;
+      if (owner.reclaims >= PAUSE_RECLAIM_LIMIT) {
+        throw new Error("Another download handler repeatedly resumed the browser");
+      }
+      owner.reclaims++;
+      try {
+        await api.downloads.pause(id);
+      } catch (error) {
+        // A different handler may already have paused it. Confirm the live
+        // state rather than failing on an already-paused error.
+        const [latest] = await api.downloads.search({id});
+        if (!latest?.paused) throw error;
+      }
+      recordEvent("browser_pause_reclaimed", {...current, paused: true});
+      // Allow a competing handler's immediate resume event to arrive.
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const [current] = await api.downloads.search({id});
+    if (!current?.paused) throw new Error("Unable to keep the browser download paused");
+  })().catch(error => {
+    owner.failure = safeIssue(error);
+    recordEvent("browser_pause_reclaim_failed", {id});
+    throw error;
+  }).finally(() => { owner.inFlight = undefined; });
+  return owner.inFlight;
+}
+async function checkedPausedDownload(original) {
+  await keepBrowserPaused(original.id);
+  let [current] = await api.downloads.search({id: original.id});
+  if (current && !current.paused) {
+    await keepBrowserPaused(original.id);
+    [current] = await api.downloads.search({id: original.id});
+  }
+  const issue = handoffIssue(current, original);
+  if (issue) throw new Error(issue);
+  return current;
+}
 function excluded(url, rules) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
@@ -187,6 +241,11 @@ api.downloads.onCreated.addListener(item => watchDownload(item));
 api.downloads.onChanged.addListener(delta => {
   if (pending.has(delta.id) && delta.paused) {
     recordEvent("browser_pause_changed", {id: delta.id, paused: delta.paused.current});
+    if (delta.paused.current === false) {
+      // This can be caused by an independent download/security extension.
+      // Do not interrupt Chrome safety blocks or a download we do not own.
+      void keepBrowserPaused(delta.id).catch(() => {});
+    }
   }
   return inspectDownload(delta.id);
 });
@@ -202,6 +261,7 @@ async function intercept(item) {
     const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
     if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: String(item.startTime || ""), timestamp: Date.now()}});
+    pauseOwners.set(item.id, {original: item, active: true, reclaims: 0, failure: undefined, inFlight: undefined});
     phase = "Pausing browser download";
     recordEvent("pause_requested", item);
     await api.downloads.pause(item.id);
@@ -212,10 +272,8 @@ async function intercept(item) {
     recordEvent("browser_paused", pausedItem);
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
     const reply = await queuedCapture(async () => {
-      const [current] = await api.downloads.search({ id: item.id });
+      const current = await checkedPausedDownload(item);
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-      const issue = handoffIssue(current, item);
-      if (issue) throw new Error(issue);
       ownedStartTime = String(current.startTime || "");
       await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
       if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
@@ -237,10 +295,15 @@ async function intercept(item) {
     if (typeof accepted !== "string" || !accepted) { accepted = undefined; throw new Error("Native host did not acknowledge the download"); }
     await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now(), nativeId: accepted}});
     recordEvent("native_acknowledged", {id: item.id}, accepted);
-    const [latest] = await api.downloads.search({ id: item.id });
-    const latestIssue = handoffIssue(latest, item);
-    if (latestIssue) throw new Error(latestIssue);
+    const latest = await checkedPausedDownload(item);
     phase = "Cancelling browser copy after acknowledgment";
+    // Stop enforcing the pause before intentionally changing Chrome state.
+    const pauseOwner = pauseOwners.get(item.id);
+    if (pauseOwner) {
+      pauseOwner.active = false;
+      pauseOwners.delete(item.id);
+      if (pauseOwner.inFlight) await pauseOwner.inFlight.catch(() => {});
+    }
     await api.downloads.cancel(item.id);
     await waitForBrowserCancellation(item);
     recordEvent("browser_cancelled", {...latest, state: "interrupted", paused: false}, accepted);
@@ -251,6 +314,13 @@ async function intercept(item) {
     recordEvent("handoff_failed", {id: item.id}, accepted);
     await showResult(false, phase + ": " + safeIssue(error) + ". Keeping the download in your browser.");
   } finally {
+    // Never race our intentional browser resume with a late pause-reclaim.
+    const pauseOwner = pauseOwners.get(item.id);
+    if (pauseOwner) {
+      pauseOwner.active = false;
+      pauseOwners.delete(item.id);
+      if (pauseOwner.inFlight) await pauseOwner.inFlight.catch(() => {});
+    }
     let recovered = true;
     if (accepted) {
       try {
