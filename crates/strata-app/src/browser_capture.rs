@@ -99,6 +99,72 @@ async fn preflight(url: &str, size: Option<u64>, mime: Option<&str>) -> Result<(
     validate_headers(response.status(), response.headers(), size, mime)
 }
 
+/// Verify a reproducible anonymous GET before discarding a browser request.
+/// Never creates a job or writes response bytes to disk. Session-dependent,
+/// signed/query URLs and unknown lengths retain their original browser request.
+pub fn replayable(runtime: &tokio::runtime::Runtime, message: &Message) -> bool {
+    runtime
+        .block_on(async {
+            let url = message.url.as_deref().context("Missing URL")?;
+            let size = message
+                .size
+                .filter(|size| *size > 0)
+                .context("Unknown size")?;
+            let parsed = reqwest::Url::parse(url)?;
+            ensure!(
+                parsed.scheme() == "https"
+                    && parsed.query().is_none()
+                    && parsed.username().is_empty()
+                    && parsed.password().is_none(),
+                "Not a public direct URL"
+            );
+            let response = reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(3))
+                .timeout(Duration::from_secs(5))
+                .redirect(reqwest::redirect::Policy::limited(10))
+                .build()?
+                .get(parsed)
+                .header("Accept-Encoding", "identity")
+                .header("Range", "bytes=0-0")
+                .send()
+                .await?;
+            ensure!(
+                response.url().scheme() == "https" && response.url().query().is_none(),
+                "Session redirect"
+            );
+            validate_headers(
+                response.status(),
+                response.headers(),
+                Some(size),
+                message.mime.as_deref(),
+            )?;
+            let headers = response.headers();
+            ensure!(
+                headers.contains_key(CONTENT_RANGE) || headers.contains_key(CONTENT_LENGTH),
+                "Unknown representation size"
+            );
+            let cache = headers
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let vary = headers
+                .get("vary")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            ensure!(
+                !cache.contains("private")
+                    && !cache.contains("no-store")
+                    && !vary.contains("cookie")
+                    && !vary.contains("authorization"),
+                "Session-dependent response"
+            );
+            Ok::<_, anyhow::Error>(())
+        })
+        .is_ok()
+}
+
 async fn wait_for_service(directory: &Path) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(12);
     while Instant::now() < deadline {
@@ -261,6 +327,19 @@ async fn transfer_confirmed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exclusive_probe_rejects_unknown_sizes_and_session_urls_without_network() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        for value in [
+            json!({"action":"probeReplay","url":"https://example.org/file.zip"}),
+            json!({"action":"probeReplay","url":"https://example.org/file.zip?token=private","size":10}),
+            json!({"action":"probeReplay","url":"https://user:secret@example.org/file.zip","size":10}),
+            json!({"action":"probeReplay","url":"http://example.org/file.zip","size":10}),
+        ] {
+            let message: Message = serde_json::from_value(value).unwrap();
+            assert!(!replayable(&runtime, &message));
+        }
+    }
     #[tokio::test]
     async fn confirmed_handoff_acknowledges_real_bytes_and_preflight_failure_creates_no_job() {
         use axum::{Router, body::Body, routing::get};

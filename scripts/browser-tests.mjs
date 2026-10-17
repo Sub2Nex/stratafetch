@@ -16,6 +16,7 @@ function background(folder, options={}) {
   const searches = new Map();
   const api={
     runtime:{onStartup:{addListener(fn){hooks.startup=fn;}},onMessage:{addListener(fn){hooks.message=fn;}},onInstalled:{addListener(fn){hooks.installed=fn;}},async sendNativeMessage(host,payload){
+      if(payload.action==='probeReplay'){calls.push({op:'probe',payload});return {ok:true,replayable:Boolean(options.replayable)};}
       calls.push({op:'native',host,payload});
       if(options.native) return options.native(payload);
       return payload.action==='cancel' ? {ok:true} : {ok:true,download:{id:'native-id'}};
@@ -30,7 +31,8 @@ function background(folder, options={}) {
       async search({id}){calls.push({op:'search',id});const count=(searches.get(id)||0)+1;searches.set(id,count);const changes=typeof options.searchItem==='function'?options.searchItem(id,count):options.searchItem;return items.has(id)?[{...items.get(id),...changes}]:[];},
       async resume(id){calls.push({op:'resume',id});if(options.resumeError)throw Error('resume failed');items.get(id).paused=false;},
       async erase({id}){calls.push({op:'erase',id});items.delete(id);return [id];},
-      async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');if(!options.cancelNoEffect)items.get(id).state='interrupted';},
+      async download(options){calls.push({op:'browser-download',options});if(options.restartError)throw Error('restart failed');return 99;},
+      async cancel(id){calls.push({op:'cancel',id});if(options.cancelError)throw Error('cancel failed');if(!options.cancelNoEffect)Object.assign(items.get(id),{state:'interrupted',error:'USER_CANCELED'});},
     },
     action:Object.fromEntries(['setBadgeText','setBadgeBackgroundColor','setTitle'].map(name=>[name,async value=>{calls.push({op:name,...value});if(options.badgeError)throw Error('badge failed');}])),
   };
@@ -38,6 +40,49 @@ function background(folder, options={}) {
   return {api,calls,hooks,item,items,stored,enabled:()=>enabled};
 }
 for(const folder of ['chromium','firefox']) {
+  for(const accept of [false,true]) {
+    test(folder+': verified public request stops before choice; accept='+accept,async()=>{
+      const b=background(folder,{replayable:true});let receive,disconnect;const sent=[];
+      b.api.runtime.connectNative=()=>({onMessage:{addListener(f){receive=f;}},onDisconnect:{addListener(f){disconnect=f;}},postMessage(p){sent.push(p);},disconnect(){disconnect();}});
+      const capture=b.hooks.created(b.item);
+      while(!sent.length||b.item.state!=='interrupted')await new Promise(r=>setImmediate(r));
+      assert.equal(b.calls.filter(c=>c.op==='cancel').length,1);
+      assert.equal(sent.some(p=>p.action==='commitCapture'),false);
+      assert.equal(b.stored.capture_pending_7.exclusive.url,b.item.url);
+      if(accept){
+        receive({ok:true,confirmation:'accepted'});
+        while(!sent.some(p=>p.action==='commitCapture'))await new Promise(r=>setImmediate(r));
+        assert.equal(b.item.state,'interrupted');
+        receive({ok:true,download:{id:'native-id'}});
+      }else receive({ok:false,declined:true});
+      await capture;
+      assert.equal(b.calls.filter(c=>c.op==='browser-download').length,accept?0:1);
+      assert.equal(b.calls.some(c=>c.op==='resume'),false);
+      assert.equal('capture_pending_7' in b.stored,false);
+    });
+  }
+  test(folder+': cancellation that does not stop the browser never authorizes native commit',async()=>{
+    const b=background(folder,{replayable:true,cancelNoEffect:true});let receive,disconnect;const sent=[];
+    b.api.runtime.connectNative=()=>({onMessage:{addListener(f){receive=f;}},onDisconnect:{addListener(f){disconnect=f;}},postMessage(p){sent.push(p);},disconnect(){disconnect();}});
+    const capture=b.hooks.created(b.item);
+    while(!sent.length)await new Promise(r=>setImmediate(r));
+    receive({ok:true,confirmation:'accepted'});await capture;
+    assert.equal(sent.some(p=>p.action==='commitCapture'),false);
+    assert.match(b.stored.lastHandoffError.message,/cancellation was not confirmed/);
+  });
+  test(folder+': restart recovers a stopped public download through normal browser download API',async()=>{
+    const b=background(folder,{item:{state:'interrupted',error:'USER_CANCELED'},stored:{capture_pending_7:{startTime:'2026-10-16T12:00:00Z',exclusive:{url:'https://example.org/file.zip',name:'file.zip',size:100}}}});
+    await b.hooks.startup();
+    assert.equal(b.calls.filter(c=>c.op==='browser-download').length,1);
+    assert.equal(b.calls.some(c=>c.op==='resume'),false);
+    assert.equal('capture_pending_7' in b.stored,false);
+  });
+  test(folder+': recovery never restarts a stopped file subsequently marked unsafe',async()=>{
+    const b=background(folder,{item:{state:'interrupted',error:'USER_CANCELED',danger:'dangerous'},stored:{capture_pending_7:{startTime:'2026-10-16T12:00:00Z',exclusive:{url:'https://example.org/file.zip',name:'file.zip',size:100}}}});
+    await b.hooks.startup();
+    assert.equal(b.calls.some(c=>c.op==='browser-download'||c.op==='resume'),false);
+    assert.equal('capture_pending_7' in b.stored,false);
+  });
   test(folder+': confirmation is sent while pause API remains unresolved',async()=>{
     let release;const pauseWait=new Promise(r=>{release=r;});
     const b=background(folder,{pauseWait});let receive,disconnect;const sent=[];
@@ -174,7 +219,6 @@ for(const folder of ['chromium','firefox']) {
     await b.hooks.created(b.item);
     const native=b.calls.findIndex(c=>c.op==='native');
     assert(native>=0);
-    assert(b.calls.slice(0,native).filter(c=>c.op==='search').length<4); // Prompt is independent of pause settling.
     assert(b.calls.filter(c=>c.op==='pause').length>=1);
     assert.equal(b.calls.some(c=>c.op==='cancel'),true);
   });

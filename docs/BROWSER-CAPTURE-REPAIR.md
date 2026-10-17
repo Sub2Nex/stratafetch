@@ -1,4 +1,6 @@
-# Browser capture repair — beta.7 / extension 0.2.4
+# Browser capture repair — beta.8 / extension 0.2.5
+
+beta.8 adds exclusive cancellation for verified public GET downloads. While confirmation opens, a bounded anonymous range request checks the known size, MIME and response cache characteristics. HTTPS/query-free requests that pass are cancelled in Chrome before the choice. The cancellation is verified before any native commit. Keep in browser and failure restart the verified URL through normal browser download/security APIs; a recipe is persisted before cancellation for crash recovery. Safety/private changes prevent replay. Unknown-size, signed/query, private and unverifiable downloads retain their existing request and use the bounded pause path below. No first-byte guarantee or arbitrary POST replay is claimed.
 
 The live trace demonstrated a pause followed by an external resume within milliseconds. Malwarebytes Browser Guard is installed and its download inspection code independently pauses and resumes downloads; that matches the trace, but does not prove it caused every failure. The old state guard rejected the resumed snapshot before requesting confirmation. A second problem was serializing the prompt behind pause negotiation and target filename updates. Separate GPU window startup added more work, and earlier source patches did not replace all installed native components.
 
@@ -14,7 +16,7 @@ Chrome Default loads ID eakfgnhnogmekemikidnkfajbnfkjgph from:
 
 `C:\Users\under\AppData\Local\Programs\StrataFetch\extensions\chromium`
 
-The native host registry points to `C:\Users\under\AppData\Local\Programs\StrataFetch\stratafetch-browser-host.exe`. The installed package is beta.7 and its matching extension is 0.2.4. One Reload of the existing Chrome extension activates the updated JavaScript. Loading another folder creates unnecessary ambiguity.
+The native host registry points to `C:\Users\under\AppData\Local\Programs\StrataFetch\stratafetch-browser-host.exe`. beta.8 requires matching extension 0.2.5. One Reload of the existing Chrome extension activates the updated JavaScript. Loading another folder creates unnecessary ambiguity.
 
 ## Build and deployment
 
@@ -24,8 +26,8 @@ The three Windows release executables were staged in .publish/target/release and
 
 ## Evidence and limits
 
-- 167 JavaScript regressions pass, including parallel pause/confirmation, external resume, post-consent safety checks, completed-file accept/decline, rollback, concurrent prompts, exclusions and restart recovery.
-- Native Windows: 23 library tests, 18 desktop tests and completed-file adoption regression pass. Four archive/identity tests pass; Firefox lint reports no errors/notices/warnings.
+- 177 JavaScript regressions pass, including pre-choice cancellation, keep/replay, cancellation no-op, unsafe recovery, parallel pause/confirmation, post-consent safety checks, completed-file accept/decline and rollback.
+- Native Windows: 24 library tests pass, including conservative probe rejection. The actual native replay probe also passed against an official public PNG (15,770 bytes), without a file/job. Prior desktop/adoption evidence remains unchanged. Four archive/identity tests pass.
 - Installed source hashes match .publish, root and the current unpacked package. Native ping reports bridgeVersion beta.7 and running=true.
 - The actual installed window was opened and closed; the same resident process remained available. Its native confirmation was observed and accepted in a controlled no-transfer test. The host returned consent, but closing its pipe without commit created no job. Confirmation was hosted in the existing desktop PID, with no extra desktop process.
 - Real Chrome accepted-download transfer after Reload remains unverified. Chrome automation is not connected; do not present fixtures or the native test as a full Chrome handoff. No sub-100ms timing measurement is claimed.

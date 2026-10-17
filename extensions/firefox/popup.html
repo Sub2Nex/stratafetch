@@ -4,6 +4,6 @@
 <p id="last-issue" role="status" aria-live="polite"></p>
 <details><summary>Download handoff details</summary><pre id="handoff-events" style="white-space:pre-wrap;max-height:200px;overflow:auto"></pre></details>
 <label><input id="capture" type="checkbox" checked> Handle browser downloads with StrataFetch</label>
-<small>Shows a confirmation and opens the app. If you decline or handoff fails, the browser continues. Private downloads, page exports and extension packages stay in the browser. Cookies are never copied.</small>
+<small>Shows a confirmation and opens the app. Verified public downloads are stopped in the browser while you choose. Keep in browser restarts those downloads; other downloads keep their original browser request. Private downloads, page exports and extension packages stay in the browser. Cookies are never copied.</small>
 <label for="excluded">Keep these domains in the browser</label><textarea id="excluded" rows="2" placeholder="example.com"></textarea><button id="save-excluded">Save exclusions</button><small>One domain per line. Subdomains are included. Manual link sends still work.</small>
 <label for="url">Direct download URL</label><input id="url" type="url" placeholder="https://…"><button id="current">Use current page URL</button><button id="send">Download with StrataFetch</button><script src="popup.js"></script></html>

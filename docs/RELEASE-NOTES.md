@@ -1,4 +1,8 @@
-# StrataFetch v0.1.0-beta.7 — Browser handoff and Windows tray
+# StrataFetch v0.1.0-beta.8 — Stop verified public browser transfers before the choice
+
+Extension 0.2.5 adds exclusive ownership for verified public GET downloads. An anonymous bounded range request validates known size, file type and public response characteristics. The original Chrome transfer is then cancelled while confirmation is open. Accepting uses StrataFetch; declining or failure restarts the verified URL through the browser. Unknown-size, query/signed, private and unverifiable requests preserve the original browser transfer. A failed browser cancellation never authorizes a competing native transfer. No browser safety protections are disabled. Completed-file adoption still handles a file that wins the race before cancellation.
+
+## Previous beta.7 changes
 
 Matching extension version: 0.2.4. Native confirmation opens in parallel with browser pause acquisition; bounded pause reclamation handles competing resume events. A file that completes before consent can be adopted without copying, deleting or downloading its bytes again. Native transfer requires a final browser commit after consent and safety checks.
 

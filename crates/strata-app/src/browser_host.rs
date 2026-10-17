@@ -38,6 +38,11 @@ fn run() -> Result<()> {
     let mut output = std::io::stdout().lock();
     while let Some(mut message) = native::read_message(&mut input)? {
         let result: Result<_> = (|| {
+            if message.action == "probeReplay" {
+                return Ok(
+                    serde_json::json!({"ok":true,"replayable":strata_app::browser_capture::replayable(&runtime, &message)}),
+                );
+            }
             if message.action == "capture" {
                 if !strata_app::browser_capture::confirm(&runtime, &message)? {
                     return Ok(serde_json::json!({"ok":false,"declined":true}));
@@ -60,10 +65,18 @@ fn run() -> Result<()> {
                 } else {
                     None
                 };
-                if commit.url.is_some() { message.url = commit.url; }
-                if commit.name.is_some() { message.name = commit.name; }
-                if commit.mime.is_some() { message.mime = commit.mime; }
-                if commit.size.is_some() { message.size = commit.size; }
+                if commit.url.is_some() {
+                    message.url = commit.url;
+                }
+                if commit.name.is_some() {
+                    message.name = commit.name;
+                }
+                if commit.mime.is_some() {
+                    message.mime = commit.mime;
+                }
+                if commit.size.is_some() {
+                    message.size = commit.size;
+                }
                 if message.path.is_some() {
                     message.size = Some(commit.size.context("Missing completed file size")?);
                 }

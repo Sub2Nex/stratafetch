@@ -145,7 +145,18 @@ function ownPause(original) {
     work = next.catch(failure => { error = failure; });
     return next;
   };
-  return {ensure, release: async () => { active = false; await work; }};
+  return {ensure, active: () => active, release: async () => { active = false; await work; }};
+}
+
+async function restartBrowser(recipe) {
+  // downloads.download uses the browser's normal request/security machinery.
+  // No cookies/headers are read or copied by the extension.
+  const options = {url: recipe.url, conflictAction: "uniquify"};
+  if (recipe.name) options.filename = recipe.name;
+  const id = await api.downloads.download(options);
+  if (!Number.isSafeInteger(id)) throw new Error("Browser did not restart the download");
+  recordEvent("browser_restarted", {id});
+  return id;
 }
 function excluded(url, rules) {
   try {
@@ -188,6 +199,7 @@ api.downloads.onChanged.addListener(delta => {
     recordEvent("browser_pause_changed", {id: delta.id, paused: delta.paused.current});
   }
   if (delta.paused?.current === false) pauseLeases.get(delta.id)?.ensure().catch(() => {});
+  if (delta.totalBytes || delta.mime || delta.finalUrl) pauseLeases.get(delta.id)?.tryExclusive?.().catch(() => {});
 
 });
 
@@ -202,6 +214,21 @@ async function intercept(item) {
   let ownedStartTime = String(item.startTime || "");
   let phase = "Reading capture settings";
   let lease;
+  let exclusive;
+  let exclusiveProbe;
+  let cancelWork;
+  let nativeOwns = false;
+  const record = nativeId => ({startTime: ownedStartTime, timestamp: Date.now(),
+    ...(exclusive ? {exclusive} : {}), ...(nativeId ? {nativeId} : {})});
+  const checked = async () => {
+    const [current] = await api.downloads.search({id: item.id});
+    // Only our verified cancellation grants this exception. Browser security,
+    // identity/private/type checks still apply to the live record.
+    const issue = handoffIssue(exclusive && current?.state === "interrupted" && current.error === "USER_CANCELED"
+      ? {...current, state: "in_progress", paused: true} : current, item, false);
+    if (issue) throw new Error(issue);
+    return current;
+  };
   try {
     const settings = await api.storage.local.get({ capture: true, excludedDomains: [] });
     if (!settings.capture || excluded(item.finalUrl || item.url, settings.excludedDomains)) return;
@@ -211,15 +238,39 @@ async function intercept(item) {
     paused = true;
     lease = ownPause(item);
     pauseLeases.set(item.id, lease);
+    lease.tryExclusive = () => {
+      if (exclusiveProbe || exclusive || !lease.active()) return exclusiveProbe;
+      exclusiveProbe = (async () => {
+        const current = await checked();
+        if (current.state !== "in_progress" || !Number.isSafeInteger(current.totalBytes) || current.totalBytes <= 0) return;
+        const url = current.finalUrl || current.url;
+        const parsed = new URL(url);
+        if (parsed.protocol !== "https:" || parsed.search) return;
+        const reply = await api.runtime.sendNativeMessage("org.stratafetch.host", {action: "probeReplay", url, size: current.totalBytes, ...(current.mime ? {mime: current.mime} : {})});
+        if (!reply?.replayable || !lease.active()) return;
+        cancelWork = (async () => {
+          const latest = await checked();
+          if (!lease.active() || latest.state !== "in_progress") return;
+          exclusive = {url, name: (latest.filename || "").split(/[\\/]/).pop(), size: latest.totalBytes};
+          // Persist the recovery recipe before stopping the original request.
+          await api.storage.local.set({["capture_pending_" + item.id]: record()});
+          if (!lease.active()) { exclusive = undefined; return; }
+          await api.downloads.cancel(item.id);
+          await waitForBrowserCancellation(item);
+          recordEvent("browser_stopped_before_choice", {id: item.id, state: "interrupted"});
+        })();
+        await cancelWork;
+      })().catch(() => {}).finally(() => { exclusiveProbe = undefined; });
+      return exclusiveProbe;
+    };
+    lease.tryExclusive();
     // Do not serialize the prompt behind pause negotiation or metadata events.
     lease.ensure().then(current => recordEvent(current.state === "complete" ? "browser_completed" : "browser_paused", current)).catch(() => {});
     const reply = await queuedCapture(async () => {
-      const [current] = await api.downloads.search({id: item.id});
+      const current = await checked();
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
-      const issue = handoffIssue(current, item, false);
-      if (issue) throw new Error(issue);
       ownedStartTime = String(current.startTime || "");
-      await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now()}});
+      await api.storage.local.set({["capture_pending_" + item.id]: record()});
       if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
       const payload = { action: "capture", url: current.finalUrl || current.url };
       const filename = (current.filename || item.filename || "").split(/[\\/]/).pop();
@@ -231,7 +282,9 @@ async function intercept(item) {
       return payload;
     }, async () => {
       phase = "Checking browser before starting StrataFetch";
-      const current = await lease.ensure();
+      await lease.tryExclusive();
+      const current = exclusive ? await checked() : await lease.ensure();
+      if (exclusive && current.state === "in_progress") throw new Error("Browser cancellation was not confirmed; native download was not started");
       const settings = await api.storage.local.get({capture: true, excludedDomains: []});
       if (!settings.capture || excluded(current.finalUrl || current.url, settings.excludedDomains)) throw new Error("Automatic capture disabled for this download");
       recordEvent("native_commit_authorized", current);
@@ -239,7 +292,7 @@ async function intercept(item) {
         if (!current.filename || current.exists === false || !Number.isSafeInteger(current.fileSize) || current.fileSize < 0) throw new Error("Completed browser file cannot be verified");
         return {action: "adoptCapture", path: current.filename, size: current.fileSize};
       }
-      if (!current.paused) throw new Error("The browser pause could not be held after consent");
+      if (!exclusive && !current.paused) throw new Error("The browser pause could not be held after consent");
       const commit = {action: "commitCapture", url: current.finalUrl || current.url};
       const name = (current.filename || item.filename || "").split(/[\\/]/).pop();
       if (name) commit.name = name;
@@ -254,27 +307,31 @@ async function intercept(item) {
     }
     accepted = reply.download?.id;
     if (typeof accepted !== "string" || !accepted) { accepted = undefined; throw new Error("Native host did not acknowledge the download"); }
-    await api.storage.local.set({["capture_pending_" + item.id]: {startTime: ownedStartTime, timestamp: Date.now(), nativeId: accepted}});
+    await api.storage.local.set({["capture_pending_" + item.id]: record(accepted)});
     recordEvent("native_acknowledged", {id: item.id}, accepted);
     if (reply.adopted === true) {
       // The native manager now references this exact completed file. Erase only
       // browser history; never delete/re-download the adopted bytes.
       accepted = undefined;
+      nativeOwns = true;
       paused = false;
       await api.downloads.erase({id: item.id});
       recordEvent("browser_completed_file_adopted", {id: item.id});
       await showResult(true, "Completed file moved to StrataFetch");
       return;
     }
-    const latest = await lease.ensure();
-    const latestIssue = handoffIssue(latest, item);
+    const latest = exclusive ? await checked() : await lease.ensure();
+    if (exclusive && latest.state === "in_progress") throw new Error("The stopped browser request became active again");
+    const latestIssue = exclusive ? "" : handoffIssue(latest, item);
     if (latestIssue) throw new Error(latestIssue);
     phase = "Cancelling browser copy after acknowledgment";
-    await api.downloads.cancel(item.id);
+    if (!exclusive) await api.downloads.cancel(item.id);
     await waitForBrowserCancellation(item);
     recordEvent("browser_cancelled", {...latest, state: "interrupted", paused: false}, accepted);
     paused = false;
     accepted = undefined;
+    nativeOwns = true;
+    if (exclusive) await api.downloads.erase({id: item.id});
     await showResult(true, "Download moved to StrataFetch");
   } catch (error) {
     recordEvent("handoff_failed", {id: item.id}, accepted);
@@ -282,6 +339,7 @@ async function intercept(item) {
   } finally {
     pauseLeases.delete(item.id);
     if (lease) await lease.release();
+    if (cancelWork) { try { await cancelWork; } catch { /* Restore below if cancellation took effect. */ } }
     let recovered = true;
     if (accepted) {
       try {
@@ -294,7 +352,19 @@ async function intercept(item) {
         await showResult(false, "StrataFetch cancellation is unconfirmed. The browser copy stays paused; check the app before resuming.");
       }
     }
-    if (paused && recovered) {
+    if (exclusive && recovered && !nativeOwns) {
+      try {
+        const [current] = await api.downloads.search({id: item.id});
+        if (current?.state === "interrupted" && current.error === "USER_CANCELED" && sameDownload(current, item)) {
+          if (eligible({...current, state: "in_progress"}, true)) {
+            await restartBrowser(exclusive);
+            await api.downloads.erase({id: item.id});
+          } else await showResult(false, "Browser safety or privacy status changed. The stopped download was not restarted.");
+          paused = false;
+        }
+      } catch { recovered = false; await showResult(false, "Browser restart failed. Retry the download from its original page."); }
+    }
+    if (paused && recovered && !nativeOwns) {
       try {
         const [current] = await api.downloads.search({id: item.id});
         if (current?.paused && current.state === "in_progress" && sameDownload(current, item)) {
@@ -341,6 +411,16 @@ async function performRecovery() {
       if (pending.has(id)) continue;
       const latest = await api.storage.local.get({[key]: null});
       if (pending.has(id) || JSON.stringify(latest[key]) !== JSON.stringify(record)) continue;
+      if (record?.exclusive && item?.state === "interrupted" && item.error === "USER_CANCELED" && String(item.startTime) === record.startTime) {
+        if (typeof record.nativeId === "string" && !(await nativeMessage({action: "cancel", id: record.nativeId}))?.ok) throw new Error("Native rollback is unconfirmed");
+        if (eligible({...item, state: "in_progress"}, true)) {
+          await restartBrowser(record.exclusive);
+          await api.downloads.erase({id});
+          await showResult(false, "An interrupted handoff was restarted in the browser.");
+        } else await showResult(false, "Browser safety or privacy status changed. The stopped download was not restarted.");
+        await api.storage.local.remove(key);
+        continue;
+      }
       if (item?.paused && item.state === "in_progress" && record?.startTime && String(item.startTime) === record.startTime) {
         if (typeof record.nativeId === "string") {
           try { if (!(await nativeMessage({action: "cancel", id: record.nativeId}))?.ok) throw new Error("Rollback rejected"); }

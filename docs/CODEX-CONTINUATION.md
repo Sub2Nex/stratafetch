@@ -1,5 +1,11 @@
 # Codex continuation — 2026-10-16
 
+## Current repair — beta.8 / extension 0.2.5
+
+The user confirms prompt latency is fixed but reports continued Chrome transfer during the choice. beta.8 introduces verified public-request cancellation before consent. probeReplay performs a bounded anonymous range GET for known-size HTTPS/query-free URLs, checking status/range length/MIME and rejecting private/no-store or cookie/auth-varying responses. No file/job is created by the probe. The original browser request is cancelled and confirmed stopped while the prompt remains open. Keep/failure replays the verified URL with downloads.download, which uses normal browser networking/security; no cookies are read/copied. A recovery recipe is persisted before cancellation. Unsafe/private changes prevent replay. Unknown/signed/private/unverifiable downloads retain the beta.7 pause-based flow. Cancellation failure must not authorize native commit. This is not a promise of pre-first-byte interception or arbitrary POST request recreation.
+
+177 JS tests pass, including pre-choice cancellation, accept versus replay, cancellation no-op and restart/unsafe recovery. All 24 native library tests pass. The actual compiled host's probeReplay passed against https://www.python.org/static/img/python-logo.png (15,770 bytes), with no saved file/job. Tests/logs: .smoke/browser-beta8. Source, installed package, version and hashes must all match beta.8 / 0.2.5 before final reporting. Chrome still requires Reload; actual Chrome accepted transfer remains unverified through automation. Prior beta.7 tray/resident native UI verification remains valid; no tray behavior changed.
+
 ## Current deployed milestone — 2026-10-17 beta.7 / extension 0.2.4
 
 This supersedes earlier uninstalled/source-only browser fixes. See BROWSER-CAPTURE-REPAIR.md for the root cause, branch comparison, exact runtime paths, protocol, build/deployment commands and evidence. The referenced origin/fix/reclaim-browser-pause-20261017 branch was fetched and reviewed; its bounded reclaim idea was retained, but its serial pre-prompt pause and complete-file rejection were replaced.
