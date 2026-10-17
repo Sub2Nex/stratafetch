@@ -53,4 +53,10 @@ document.getElementById("current").onclick = async () => {
   } finally { current.disabled = false; }
 };
 document.getElementById("send").onclick = () => message({ action: "capture", url: document.getElementById("url").value });
+document.getElementById("url").onkeydown = event => {
+  if (event.key === "Enter" && !document.getElementById("send").disabled) {
+    event.preventDefault();
+    document.getElementById("send").click();
+  }
+};
 message({ action: "ping" });
