@@ -174,7 +174,10 @@ impl App {
 
     fn request(&mut self, request: Request) {
         if let Err(error) = self.worker.commands.try_send(request) {
-            let message = strata_app::localized_format!("Engine unavailable or busy: {error}", "Hämtningsmotorn är otillgänglig eller upptagen: {error}");
+            let message = strata_app::localized_format!(
+                "Engine unavailable or busy: {error}",
+                "Hämtningsmotorn är otillgänglig eller upptagen: {error}"
+            );
             if let Request::Probe {
                 url,
                 form_id,
@@ -207,7 +210,10 @@ impl App {
 
         std::thread::spawn(move || {
             if let Err(error) = open::that(path) {
-                let _ = errors.send(strata_app::localized_format!("Cannot open location: {error}", "Det gick inte att öppna platsen: {error}"));
+                let _ = errors.send(strata_app::localized_format!(
+                    "Cannot open location: {error}",
+                    "Det gick inte att öppna platsen: {error}"
+                ));
             }
         });
     }
@@ -346,8 +352,14 @@ impl App {
             match event {
                 Event::Focus(attention) => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    if attention.id.is_some() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::RequestUserAttention(
+                            egui::UserAttentionType::Critical,
+                        ));
+                    } else {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                    }
                     if attention.setup {
                         self.state.show_settings();
                         self.state.settings_page = 7;
@@ -459,7 +471,10 @@ impl App {
                     Completion::None => (),
 
                     Completion::Message => {
-                        self.state.message = Some(strata_app::localized_format!("Download complete: {name}", "Hämtningen är klar: {name}"))
+                        self.state.message = Some(strata_app::localized_format!(
+                            "Download complete: {name}",
+                            "Hämtningen är klar: {name}"
+                        ))
                     }
 
                     Completion::OpenFolder => self.action(Action::OpenFolder(id)),
@@ -635,7 +650,9 @@ impl eframe::App for App {
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let language_changed = strata_app::i18n::swedish() != self.state.prefs.swedish;
         strata_app::i18n::set_swedish(self.state.prefs.swedish);
-        if language_changed && let Some(tray) = &self.tray { tray.refresh_language(); }
+        if language_changed && let Some(tray) = &self.tray {
+            tray.refresh_language();
+        }
         let _ = strata_app::i18n::save_preference(self.state.prefs.swedish);
         while let Some(event) = self.tray.as_ref().and_then(|tray| tray.event()) {
             match event {
@@ -764,10 +781,15 @@ impl eframe::App for App {
                         .map(|j| j.speed)
                         .sum();
 
-                    ui.label(strata_app::localized_format!("Current aggregate: {}/s", "Aktuell totalhastighet: {}/s", bytes(speed)));
+                    ui.label(strata_app::localized_format!(
+                        "Current aggregate: {}/s",
+                        "Aktuell totalhastighet: {}/s",
+                        bytes(speed)
+                    ));
 
                     ui.label(strata_app::localized_format!(
-                        "Completed files: {}", "Färdiga filer: {}",
+                        "Completed files: {}",
+                        "Färdiga filer: {}",
                         self.jobs
                             .iter()
                             .filter(|j| j.status == Status::Completed)
@@ -800,9 +822,9 @@ impl eframe::App for App {
                         ));
                     }
 
-                    ui.small(
-                        strata_app::i18n::tr("Last 90 measured one-second samples; no lifetime throughput estimate."),
-                    );
+                    ui.small(strata_app::i18n::tr(
+                        "Last 90 measured one-second samples; no lifetime throughput estimate.",
+                    ));
                 });
 
             self.state.statistics_open = open;
@@ -813,7 +835,8 @@ impl eframe::App for App {
                 .collapsible(false)
                 .show(&ctx, |ui| {
                     ui.label(strata_app::localized_format!(
-                        "Remove {} inactive records and their partial data?", "Vill du ta bort {} inaktiva poster och deras ofullständiga data?",
+                        "Remove {} inactive records and their partial data?",
+                        "Vill du ta bort {} inaktiva poster och deras ofullständiga data?",
                         ids.len()
                     ));
 

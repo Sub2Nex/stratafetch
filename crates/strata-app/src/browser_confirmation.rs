@@ -20,7 +20,7 @@ pub fn show(name: String, source: String, destination: String) -> Result<bool> {
         persist_window: false,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("org.stratafetch.confirmation")
-            .with_title(crate::i18n::tr("Download with StrataFetch"))
+            .with_title(crate::i18n::tr("Start download"))
             .with_inner_size([560.0, 330.0])
             .with_min_inner_size([460.0, 300.0])
             .with_active(true)
@@ -100,13 +100,14 @@ pub(crate) fn windows_dialog_cancellable(
     if cancelled.load(Ordering::Acquire) {
         return Ok(false);
     }
-    let title = wide(crate::i18n::tr("Download with StrataFetch"));
+    let title = wide(crate::i18n::tr("Start download"));
     let heading = wide(crate::i18n::tr("Download this file?"));
     let content = wide(&crate::localized_format!(
-        "{name}\n\nFrom: {source}\nSave to: {destination}\n\nChoose StrataFetch or keep the file in your browser.", "{name}\n\nFrån: {source}\nSpara i: {destination}\n\nVälj StrataFetch eller behåll filen i webbläsaren."
+        "{name}\n\nFrom: {source}\nSave to: {destination}\n\nStart the download in StrataFetch or cancel.",
+        "{name}\n\nFrån: {source}\nSpara i: {destination}\n\nStarta hämtningen i StrataFetch eller avbryt."
     ));
-    let accept = wide(crate::i18n::tr("Download with StrataFetch"));
-    let keep = wide(crate::i18n::tr("Keep in browser"));
+    let accept = wide(crate::i18n::tr("Start download"));
+    let keep = wide(crate::i18n::tr("Cancel"));
     let buttons = [
         TASKDIALOG_BUTTON {
             nButtonID: 100,
@@ -212,13 +213,13 @@ impl Confirmation {
                         ui.label(crate::localized_format!("Save to: {}", "Spara i: {}", self.destination));
                     });
                 ui.add_space(12.0);
-                ui.label(crate::i18n::tr("The browser download stays paused while you decide."));
+                ui.label(crate::i18n::tr("The browser download has been stopped. Nothing downloads until you choose Start download."));
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     let download = ui.add_sized(
                         [240.0, 34.0],
                         egui::Button::new(
-                            egui::RichText::new(crate::i18n::tr("Download with StrataFetch"))
+                            egui::RichText::new(crate::i18n::tr("Start download"))
                                 .color(egui::Color32::WHITE),
                         )
                         .fill(egui::Color32::from_rgb(35, 125, 103)),
@@ -227,7 +228,7 @@ impl Confirmation {
                         self.accepted.store(true, Ordering::Relaxed);
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
-                    let keep = ui.add_sized([180.0, 34.0], egui::Button::new(crate::i18n::tr("Keep in browser")));
+                    let keep = ui.add_sized([180.0, 34.0], egui::Button::new(crate::i18n::tr("Cancel")));
                     if self.first_frame {
                         keep.request_focus();
                     }

@@ -92,8 +92,18 @@ mod windows {
                             return 0;
                         }
                         unsafe {
-                            AppendMenuW(menu, MF_STRING, 1, wide(strata_app::i18n::tr("Open StrataFetch")).as_ptr());
-                            AppendMenuW(menu, MF_STRING, 2, wide(strata_app::i18n::tr("Exit StrataFetch")).as_ptr());
+                            AppendMenuW(
+                                menu,
+                                MF_STRING,
+                                1,
+                                wide(strata_app::i18n::tr("Open StrataFetch")).as_ptr(),
+                            );
+                            AppendMenuW(
+                                menu,
+                                MF_STRING,
+                                2,
+                                wide(strata_app::i18n::tr("Exit StrataFetch")).as_ptr(),
+                            );
                         }
                         let mut point: POINT = unsafe { std::mem::zeroed() };
                         unsafe {
@@ -219,7 +229,9 @@ mod windows {
             self.events.try_recv().ok()
         }
         pub fn refresh_language(&self) {
-            unsafe { Shell_NotifyIconW(NIM_MODIFY, &icon(self.hwnd as HWND)); }
+            unsafe {
+                Shell_NotifyIconW(NIM_MODIFY, &icon(self.hwnd as HWND));
+            }
         }
     }
     impl Drop for Tray {

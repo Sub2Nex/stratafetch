@@ -36,11 +36,11 @@ var StrataLocale = (() => {
   return {t, error, apply, setLanguage};
 })();
 '''.replace('CATALOGUE', json.dumps(catalogue, ensure_ascii=False, separators=(',',':')))
-description='Send browser downloads to StrataFetch. Choose the desktop app or keep downloading in your browser.'
+description='Capture browser downloads in StrataFetch. Start the download in the app or cancel.'
 for browser in ['chromium','firefox']:
     folder=root/'extensions'/browser
     (folder/'locale.js').write_text(helper,encoding='utf-8')
-    for language, text in [('en',description),('sv','Skicka webbläsarhämtningar till StrataFetch. Välj appen eller behåll hämtningen i webbläsaren.')]:
+    for language, text in [('en',description),('sv','Fånga webbläsarhämtningar med StrataFetch. Starta hämtningen i appen eller avbryt.')]:
         destination=folder/'_locales'/language
         destination.mkdir(parents=True,exist_ok=True)
         (destination/'messages.json').write_text(json.dumps({'extensionDescription':{'message':text}},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

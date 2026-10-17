@@ -241,8 +241,13 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                             };
 
                             if ui
-                                .selectable_label(state.sort == *column,strata_app::i18n::tr(&label))
-                                .on_hover_text(strata_app::i18n::tr("Click to sort. Drag the column boundary to resize."))
+                                .selectable_label(
+                                    state.sort == *column,
+                                    strata_app::i18n::tr(&label),
+                                )
+                                .on_hover_text(strata_app::i18n::tr(
+                                    "Click to sort. Drag the column boundary to resize.",
+                                ))
                                 .clicked()
                             {
                                 if state.sort == *column {
@@ -307,11 +312,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, jobs: &[Job]) -> Vec<Action> {
                                     }
 
                                     Column::Size => {
-                                        ui.label(
-                                            job.size
-                                                .map(|n| bytes(n as f64))
-                                                .unwrap_or_else(|| strata_app::i18n::tr("Unknown").into()),
-                                        );
+                                        ui.label(job.size.map(|n| bytes(n as f64)).unwrap_or_else(
+                                            || strata_app::i18n::tr("Unknown").into(),
+                                        ));
                                     }
 
                                     Column::Status => {

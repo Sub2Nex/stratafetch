@@ -7,7 +7,9 @@ use std::collections::{HashMap, HashSet};
 use strata_core::{Job, Settings, Status};
 
 /// Shared interface translations; persisted category/status values remain stable.
-pub fn text(swedish: bool, label: &str) -> &str { strata_app::i18n::text(swedish, label) }
+pub fn text(swedish: bool, label: &str) -> &str {
+    strata_app::i18n::text(swedish, label)
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Column {

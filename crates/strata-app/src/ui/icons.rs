@@ -238,5 +238,8 @@ pub fn button(ui: &mut egui::Ui, icon: Icon, label: &str, enabled: bool, tooltip
     ui.painter()
         .galley(rect.min + egui::vec2(28.0, 8.0), text, color);
 
-    response.on_hover_text(strata_app::i18n::tr(tooltip)).clicked() && enabled
+    response
+        .on_hover_text(strata_app::i18n::tr(tooltip))
+        .clicked()
+        && enabled
 }

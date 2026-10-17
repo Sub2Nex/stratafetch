@@ -91,7 +91,10 @@ async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: C
 
                 jobs: vec![],
 
-                error: Some(strata_app::localized_format!("Engine task failed: {e}", "Hämtningsuppgiften misslyckades: {e}")),
+                error: Some(strata_app::localized_format!(
+                    "Engine task failed: {e}",
+                    "Hämtningsuppgiften misslyckades: {e}"
+                )),
 
                 accepted_id: None,
 
@@ -107,7 +110,10 @@ async fn call(manager: Option<&Manager>, directory: &std::path::Path, command: C
 
                 jobs: vec![],
 
-                error: Some(strata_app::localized_format!("Local service unavailable: {e:#}", "Den lokala tjänsten är inte tillgänglig: {e:#}")),
+                error: Some(strata_app::localized_format!(
+                    "Local service unavailable: {e:#}",
+                    "Den lokala tjänsten är inte tillgänglig: {e:#}"
+                )),
 
                 accepted_id: None,
 

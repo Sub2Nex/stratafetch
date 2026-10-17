@@ -355,5 +355,13 @@
   "An interrupted handoff was restarted in the browser.": "En avbruten överlämning startades om i webbläsaren.",
   "An interrupted handoff was resumed in the browser.": "En avbruten överlämning återupptogs i webbläsaren.",
   "Handoff recovery is incomplete. Check StrataFetch before resuming the paused browser copy.": "Återställningen av överlämningen är inte klar. Kontrollera StrataFetch innan du återupptar webbläsarens pausade kopia.",
-  "Download rejected": "Hämtningen avvisades"
+  "Download rejected": "Hämtningen avvisades",
+  "Download cancelled": "Hämtningen avbröts",
+  "The browser download has been stopped. Nothing downloads until you choose Start download.": "Webbläsarens hämtning har stoppats. Ingen hämtning startar förrän du väljer Starta hämtning.",
+  "Captured downloads are removed from the browser. Choose Start download or Cancel. Cancel and bridge errors never restart a download in the browser.": "Fångade hämtningar tas bort från webbläsaren. Välj Starta hämtning eller Avbryt. Avbrott och bryggfel startar aldrig om hämtningen i webbläsaren.",
+  "Download was not started. Repair browser integration and retry.": "Hämtningen startades inte. Reparera webbläsarintegreringen och försök igen.",
+  "Access to the specified native messaging host is forbidden.": "Tilläggets ID är inte registrerat i webbläsarbryggan.",
+  "Download became private, extension-managed, or an unsupported file type": "Hämtningen blev privat, hanteras av ett annat tillägg eller har en filtyp som inte stöds",
+  "Download cleanup failed. Cancel the browser entry and retry after repairing integration.": "Hämtningen kunde inte städas bort. Avbryt posten i webbläsaren och försök igen efter att integreringen reparerats.",
+  "Captured downloads are stopped and removed from the browser before you choose Start download or Cancel. Cancel and bridge errors never restart the browser. Private downloads, unsupported files and excluded websites stay outside automatic capture. Cookies are never copied.": "Fångade hämtningar stoppas och tas bort från webbläsaren innan du väljer Starta hämtning eller Avbryt. Avbrott och bryggfel startar aldrig om hämtningen i webbläsaren. Privata hämtningar, filtyper som inte stöds och undantagna webbplatser fångas inte. Kakor kopieras aldrig."
 }

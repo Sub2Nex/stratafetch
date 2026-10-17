@@ -87,7 +87,11 @@ impl Updater {
             self.busy = false;
             match event {
                 Event::Checked(Ok(Some(release))) => {
-                    self.message = strata_app::localized_format!("StrataFetch {} is available.", "StrataFetch {} är tillgänglig.", release.tag_name);
+                    self.message = strata_app::localized_format!(
+                        "StrataFetch {} is available.",
+                        "StrataFetch {} är tillgänglig.",
+                        release.tag_name
+                    );
                     self.release = Some(release);
                     self.open = true;
                 }
@@ -98,7 +102,10 @@ impl Updater {
                     self.open = true;
                 }
                 Event::Checked(Err(error)) | Event::Downloaded(Err(error)) => {
-                    self.message = strata_app::localized_format!("Update failed: {error}. You can try again.", "Uppdateringen misslyckades: {error}. Du kan försöka igen.");
+                    self.message = strata_app::localized_format!(
+                        "Update failed: {error}. You can try again.",
+                        "Uppdateringen misslyckades: {error}. Du kan försöka igen."
+                    );
                 }
             }
         }

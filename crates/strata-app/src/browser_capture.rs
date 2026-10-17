@@ -300,7 +300,17 @@ async fn transfer_confirmed(
     launch: impl FnOnce() -> Result<()>,
 ) -> Result<Value> {
     preflight(url, size, mime).await?;
-    launch()?;
+    let running = tokio::time::timeout(
+        Duration::from_millis(500),
+        ipc::call(directory, Command::List),
+    )
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .is_some_and(|reply| reply.error.is_none());
+    if !running {
+        launch()?;
+    }
     wait_for_service(directory).await?;
     let reply = check_reply(
         ipc::call(

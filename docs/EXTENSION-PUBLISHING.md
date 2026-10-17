@@ -52,7 +52,7 @@ The manifest requires Firefox 142+ and declares `browsingActivity`, `websiteActi
 
 **Description:**
 
-StrataFetch connects browser downloads to the free, open-source StrataFetch desktop download manager. When an eligible HTTP or HTTPS download starts, the extension pauses the browser copy and asks whether to download with StrataFetch. Choose Download to open the app and start the transfer, or Keep in browser to continue normally. Identified GET transfers are cancelled while you choose; Keep in browser or failed handoff restarts through the browser. POST requests remain in the browser. Requests begun before extension reload retain the conservative pause fallback.
+StrataFetch connects browser downloads to the free, open-source StrataFetch desktop download manager. When an eligible HTTP or HTTPS download starts, the extension stops and removes the browser copy, then offers Start download / Cancel. Captured transfers are cancelled and removed before Start download / Cancel. Cancellation and bridge failures never restart browser transfers. POST requests are not captured.
 
 Automatic capture is enabled initially and can be switched off in the popup. You can also send a direct link from its context menu or the popup. Install the matching full desktop package and register its native bridge in Settings → Browser integration first. No account is required.
 
@@ -68,7 +68,7 @@ Download information is passed to the local app and the chosen download server. 
 
 ## Permission explanations
 
-- `downloads`: observe eligible downloads, stop identified GET transfers during confirmation, restart on decline/failure, and adopt completed files only after consent. Only owned IDs are changed.
+- `downloads`: observe eligible downloads, cancel captured transfers and remove their entries before consent; never restart on cancellation or failure. Only owned IDs are changed.
 - `webRequest` and HTTP/HTTPS host access: observe request URL and method briefly to distinguish restartable GET downloads from POST. No headers, bodies or page scripts are accessed.
 - `nativeMessaging`: connect to the registered local StrataFetch app; pass download URL/name/size/type and receive status.
 - `contextMenus`: offer Download with StrataFetch on a link.
@@ -79,7 +79,7 @@ Complete owner certifications truthfully against this implementation. The extens
 
 ## Reviewer checks
 
-Install the matching desktop package and register the correct extension origin. No credentials are needed. With capture enabled, start a public direct-file download and choose Keep in browser; it resumes without a native transfer. Repeat and choose Download; StrataFetch opens, receives file data and the browser copy is cancelled. Turn capture off; a new download stays in the browser. With the companion unavailable or an anonymous URL returning a login page, the original browser copy must resume. Multiple downloads should prompt one at a time.
+Install the matching desktop package and register the correct extension origin. No credentials are needed. With capture enabled, start a public direct-file download and choose Cancel; no browser or native transfer restarts. Repeat and choose Download; StrataFetch opens, receives file data and the browser copy is cancelled. Turn capture off; a new download stays in the browser. With the companion unavailable or an anonymous URL returning a login page, the download must stay stopped with an actionable error. Multiple downloads should prompt one at a time.
 
 Use actual installed-extension screenshots for store media. Signing, review, public listing URLs and Chrome's assigned origin remain pending until the submissions are complete.
 

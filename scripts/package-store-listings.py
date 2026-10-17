@@ -11,11 +11,11 @@ args = parser.parse_args()
 summary = 'Send browser downloads to StrataFetch. Choose the desktop app or keep downloading in your browser.'
 description = '''Bring browser downloads into StrataFetch, a free, open-source desktop download manager.
 
-When an eligible download starts, StrataFetch asks whether you want to download it in the desktop app or keep it in your browser. Identified GET transfers are cancelled during confirmation without waiting for a network probe. Declined or failed handoffs restart through the browser. POST requests remain in the browser; requests begun before extension reload retain the conservative pause fallback.
+When an eligible download starts, StrataFetch asks whether you want to download it in the desktop app or keep it in your browser. Captured transfers are cancelled and removed from browser history before confirmation. Choose Start download or Cancel. Cancellation and bridge errors never restart the browser. Observed POST requests remain outside automatic capture.
 
 WHAT YOU CAN DO
 • Capture eligible public HTTP and HTTPS file downloads automatically.
-• Choose Download with StrataFetch or Keep in browser in the confirmation window.
+• Choose Start download or Cancel in the confirmation window.
 • Send a link through the right-click menu.
 • Paste a direct download URL in the extension popup, or use the current page URL.
 • Check the local companion connection from the popup.
@@ -34,9 +34,9 @@ Source, issues and setup instructions: https://github.com/Sub2Nex/stratafetch
 Privacy policy: https://github.com/Sub2Nex/stratafetch/blob/main/PRIVACY.md
 '''
 permissions = '''SINGLE PURPOSE
-Hand off user-selected or confirmed browser file downloads to the installed local StrataFetch download manager, with browser fallback.
+Hand off user-selected or confirmed browser file downloads to the installed local StrataFetch download manager, with Start download / Cancel confirmation.
 
-downloads: Detect eligible downloads, stop identified GET transfers during consent, restart through the browser on decline/failure, and adopt completed files after consent.
+downloads: Detect eligible downloads, cancel captured transfers and remove their entries before consent; never restart on cancellation or failure.
 webRequest and HTTP/HTTPS host access: Observe request URL and method in a bounded in-memory map for up to 60 seconds to distinguish GET from POST; no headers or request bodies are read.
 nativeMessaging: Communicate with the registered local StrataFetch native host to submit the download URL/file metadata and obtain connection and handoff status.
 contextMenus: Add Download with StrataFetch to the link context menu.
@@ -70,7 +70,7 @@ Firefox retains stratafetch@local. Normal persistent installation requires Mozil
 
 TESTS TO PERFORM IN THE INSTALLED BROWSER
 1. Install the extension and companion, register the native host, and open the popup. Check connection status.
-2. Enable automatic capture. Download a small public direct file. Choose Keep in browser. Verify the browser download resumes without a native download.
+2. Enable automatic capture. Download a small public direct file. Choose Cancel. Verify no browser or native download restarts.
 3. Repeat and choose Download with StrataFetch. Verify the desktop opens/focuses and downloads the file; the browser copy cancels after native acknowledgment. Compare the file checksum.
 4. Disable capture and start another download; it must stay in the browser.
 5. Right-click a public direct-file link and select Download with StrataFetch.

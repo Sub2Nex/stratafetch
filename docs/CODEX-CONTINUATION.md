@@ -1,3 +1,9 @@
+## beta.12 repair in progress
+
+User loaded the store-upload ZIP unpacked at C:/Users/under/Downloads/stratafetch-chrome-webstore, ID npnlmaepjiphmpnbggodiibgnjfigadi, not the bundled installed folder/ID previously assumed. Verified all four JS/HTML payloads matched installed beta.11 before authorizing this exact local origin. Added it to browser-origins.json baseline and ran installed --register-local; real Edge native ping with that exact folder/ID succeeds. Do NOT put this path-derived local ID in production store IDs. Full setup preserves it. Update this loaded folder with store ZIP contents (no development key) and ask for one Reload.
+
+New 0.2.7 capture cancels/erases before Start/Cancel, keeps snapshot metadata after erasure, and never restarts/resumes Chrome on decline/error/recovery. Tiny files completed during cancel are removed with downloads.removeFile before consent. Captured browser entries disappear before prompt; no universal pre-request zero-byte guarantee. New state-machine tests replace retired pause/fallback expectations. Real isolated Edge stream test passes cancellation, erasure before consent, no restart, POST preservation. Existing app uses taskbar attention on accepted IDs; transfer avoids launching/focusing a second desktop when service already running. Windows controls highlight color.
+
 ## beta.11 interception repair
 
 Identified GET downloads now cancel before choice without network probe/size gates. webRequest + HTTP/HTTPS host permissions observe methods only in bounded memory; POST chains untouched. Real isolated Edge stream test passed (stopped during consent, decline restart, accept no browser restart, POST untouched). Native endpoint substituted only in that browser test. User Chrome still needs one Reload of installed unpacked folder; no claim of zero-byte interception. All complete unpacked payloads now sync together.

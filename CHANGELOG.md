@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.12 — 2026-10-17
+
+- Replace browser fallback with Start download / Cancel. Captured transfers stop and disappear from browser history before consent; errors and cancellation never restart Chrome.
+- Prevent capture loops caused by fallback download creation and preserve native ownership after a lost acknowledgment.
+- Request Windows taskbar attention for accepted browser transfers without launching a redundant desktop process.
+- Translate the new confirmation, cancellation and bridge diagnostics; extension version 0.2.7.
+
 ## 0.1.0-beta.11 — 2026-10-17
 
 - Stop observed GET browser transfers during consent immediately, including unknown-size/query downloads; Keep in browser restarts normally, while POST requests stay untouched. Request-method observation replaces the slow pre-cancellation probe for new requests.

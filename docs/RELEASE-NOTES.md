@@ -1,4 +1,16 @@
-# StrataFetch v0.1.0-beta.11 — Swedish interface and download controls
+# StrataFetch v0.1.0-beta.12 — Start/Cancel browser capture
+
+Captured transfers are cancelled and removed from browser history before the confirmation opens. Start download transfers through StrataFetch; Cancel closes the prompt. Neither cancellation nor a failed native bridge restarts a browser download. A file that wins the completion race is removed through the browser API before a new native transfer can start. Private, unsafe, extension-managed, excluded and observed POST downloads remain outside automatic capture.
+
+An existing desktop receives Windows taskbar attention when a browser download is accepted, without a redundant launcher focusing it first. Windows chooses the taskbar highlight color. The native prompt and browser explanations use the selected app language.
+
+Extension 0.2.7 requires the matching full beta.12 package. When loading a store-upload ZIP unpacked, its path-derived extension ID differs from the bundled development ID; that exact local ID must be registered. Production store IDs must still come from the respective stores. No wildcard origins are allowed.
+
+Verified real Chromium browser stream cancellation, removal before consent, no restart for Start/Cancel, and real native messaging using the user's loaded extension ID. The browser stream test substitutes the consent/ack endpoint, while the bridge ping uses the actual registered host. Full accepted download in the user's Chrome session remains to be verified after Reload. The downloads API can briefly create an entry before cancellation/erasure; zero-byte pre-request blocking is not claimed.
+
+## Previous beta.11 changes
+
+Swedish interface and download controls
 
 Enable Svenska under Settings → Appearance. Desktop menus, advanced settings, transfer/scheduler/update dialogs, tray actions and browser confirmation text use Swedish. The browser popup follows the app language received from its local companion; before connecting it uses the browser UI language. The saved choice is shared with separately launched native hosts and the Windows installer. File names, paths, URLs, protocol identifiers and verbatim third-party diagnostics are preserved.
 

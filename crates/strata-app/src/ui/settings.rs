@@ -144,7 +144,7 @@ if let Ok(folder) = strata_app::browser_integration::extension_folder(strata_app
     ui.label(strata_app::localized_format!("Local Chromium extension: {}", "Lokalt Chromium-tillägg: {}", folder.display()));
     if ui.button(strata_app::i18n::tr("Copy Chromium folder path")).clicked() { ctx.copy_text(folder.to_string_lossy().into()); }
 }
-ui.small(strata_app::i18n::tr("The extension popup can enable or disable automatic capture. A confirmation appears before handoff; a failed or declined handoff resumes the browser download. Private downloads, extension packages and webpage exports stay in the browser. Cookies are never copied; login-dependent downloads may need the browser."));
+ui.small(strata_app::i18n::tr("Captured downloads are stopped and removed from the browser before you choose Start download or Cancel. Cancel and bridge errors never restart the browser. Private downloads, unsupported files and excluded websites stay outside automatic capture. Cookies are never copied."));
 ui.hyperlink_to(strata_app::i18n::tr("Local setup instructions"), "https://github.com/Sub2Nex/stratafetch/blob/main/docs/BROWSER.md");
 ui.hyperlink_to(strata_app::i18n::tr("Full setup package and browser component updates"), "https://github.com/Sub2Nex/stratafetch/releases/latest");
 }

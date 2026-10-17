@@ -21,7 +21,7 @@ async function message(payload) {
       if (reply?.ok) {
         if (payload.action === "ping") setStatus(reply.running === false ? "Ready · StrataFetch opens when you accept a download." : "Connected · {count} active or queued", {count: reply.active ?? 0});
         else setStatus("Added: {name}", {name: reply.download?.filename ?? locale.t("Downloads")});
-      } else setStatus(reply?.declined ? "Kept in browser." : reply?.error ? locale.error(reply.error) : "StrataFetch did not respond. Open Settings → Browser integration to repair setup.");
+      } else setStatus(reply?.declined ? "Download cancelled" : reply?.error ? locale.error(reply.error) : "StrataFetch did not respond. Open Settings → Browser integration to repair setup.");
     }
   } catch { if (revision === statusRevision) setStatus("Open StrataFetch → Settings → Browser integration to finish local setup."); }
   finally { document.getElementById("send").disabled = false; }

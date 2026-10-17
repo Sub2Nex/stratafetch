@@ -64,7 +64,10 @@ fn item(ui: &mut egui::Ui, state: &mut State, jobs: &[Job], label: &str, filter:
             .selectable(false),
     );
     if response
-        .on_hover_text(strata_app::localized_format!("{label}: {count} downloads", "{label}: {count} hämtningar"))
+        .on_hover_text(strata_app::localized_format!(
+            "{label}: {count} downloads",
+            "{label}: {count} hämtningar"
+        ))
         .clicked()
     {
         state.filter = filter;

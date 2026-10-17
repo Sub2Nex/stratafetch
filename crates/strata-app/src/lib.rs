@@ -7,8 +7,8 @@ pub mod browser_integration;
 pub mod browser_registration;
 #[cfg(windows)]
 mod browser_windows;
-pub mod ipc;
 pub mod i18n;
+pub mod ipc;
 #[cfg(target_os = "linux")]
 pub mod linux_desktop;
 pub mod native;
@@ -181,7 +181,12 @@ pub fn execute(manager: &Manager, command: Command) -> Reply {
                     manager.schedule(&job.id, &category, None)?;
                 }
             }
-            Command::AddPausedUnique { url, directory, name, category } => {
+            Command::AddPausedUnique {
+                url,
+                directory,
+                name,
+                category,
+            } => {
                 let (job, reused) = manager.add_unique(&url, &directory, name.as_deref())?;
                 accepted_id = Some(job.id.clone());
                 // Reusing a download must not change its existing schedule/category.

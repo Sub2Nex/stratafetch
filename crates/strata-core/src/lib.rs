@@ -242,14 +242,26 @@ impl Manager {
     }
     /// Adds a URL. Credentials embedded in URLs are rejected; names never escape the folder.
     pub fn add(&self, raw: &str, directory: &Path, name: Option<&str>) -> Result<Job> {
-        self.add_with_policy(raw, directory, name, false).map(|(job, _)| job)
+        self.add_with_policy(raw, directory, name, false)
+            .map(|(job, _)| job)
     }
     /// Reuse unfinished manual/batch downloads with the same URL and destination.
     /// Native browser captures retain their separate transfer/rollback ownership.
-    pub fn add_unique(&self, raw: &str, directory: &Path, name: Option<&str>) -> Result<(Job, bool)> {
+    pub fn add_unique(
+        &self,
+        raw: &str,
+        directory: &Path,
+        name: Option<&str>,
+    ) -> Result<(Job, bool)> {
         self.add_with_policy(raw, directory, name, true)
     }
-    fn add_with_policy(&self, raw: &str, directory: &Path, name: Option<&str>, unique: bool) -> Result<(Job, bool)> {
+    fn add_with_policy(
+        &self,
+        raw: &str,
+        directory: &Path,
+        name: Option<&str>,
+        unique: bool,
+    ) -> Result<(Job, bool)> {
         // Serialize destination reservations and sequence assignment across IPC clients.
         let _controls = self.0.controls.lock().unwrap();
         anyhow::ensure!(
@@ -281,11 +293,25 @@ impl Manager {
             directory = organized;
         }
         let jobs = self.0.jobs.lock().unwrap();
-        if unique && let Some(existing) = jobs.values().find(|job| {
-            job.url == url.as_str() && job.status != Status::Completed
-                && job.destination.parent() == Some(directory.as_path())
-                && job.destination.file_name().and_then(|name| name.to_str()).is_some_and(|stored| stored == filename || stored.split_once('-').is_some_and(|(prefix, suffix)| !prefix.is_empty() && prefix.bytes().all(|byte| byte.is_ascii_digit()) && suffix == filename))
-        }) {
+        if unique
+            && let Some(existing) = jobs.values().find(|job| {
+                job.url == url.as_str()
+                    && job.status != Status::Completed
+                    && job.destination.parent() == Some(directory.as_path())
+                    && job
+                        .destination
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|stored| {
+                            stored == filename
+                                || stored.split_once('-').is_some_and(|(prefix, suffix)| {
+                                    !prefix.is_empty()
+                                        && prefix.bytes().all(|byte| byte.is_ascii_digit())
+                                        && suffix == filename
+                                })
+                        })
+            })
+        {
             return Ok((existing.clone(), true));
         }
         let mut destination = directory.join(&filename);
